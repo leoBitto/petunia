@@ -1,0 +1,16 @@
+# config/config.py
+
+GCP_PROJECT_ID = "trading-469418"
+SERVICE_ACCOUNT_SECRET_NAME = "service_account"
+
+
+UNIVERSE_SHEET_ID = "1Uh3S3YCyvupZ5yZh2uDi0XYGaZIkEkupxsYed6xRxgA"
+REPORT_SHEET_ID = "1fGTT6O197auwyHGnEBKwvHm3oZwwWz9r8Nm4hz76jKM"
+
+BASE_CURRENCY = "USD"
+MAX_POSITIONS = 10
+
+
+DATA_YEARS_BACK = 1
+DATA_TIMEZONE = "America/New_York"
+
