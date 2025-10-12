@@ -1,5 +1,3 @@
-
-```markdown
 # 💸 Money Trading System
 
 Automated trading data pipeline for fetching, analyzing, and generating trading signals — with Google Sheets integration and `systemd` scheduling.
@@ -138,5 +136,4 @@ See [`docs/DEV_NOTES.md`](./docs/DEV_NOTES.md) for:
 
 ---
 
-```
 
