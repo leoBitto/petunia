@@ -1,17 +1,18 @@
-```markdown
 # 🧠 DEV NOTES — Progetto "Wheres My Money"
 
-Questo documento serve come diario tecnico e guida rapida per lavorare sul progetto in modo coerente e riprendere facilmente il flusso di lavoro dopo una pausa.
+Questo documento serve come **diario tecnico** e **guida rapida per sviluppatori**.  
+Descrive l’architettura attuale, i comandi utili e le convenzioni di lavoro per mantenere coerenza nel progetto.
 
 ---
 
 ## 🚀 Obiettivo del progetto
 
-Costruire un sistema semplice e scalabile per:
+Costruire un sistema **semplice, automatizzato e scalabile** per:
+
 - raccogliere dati giornalieri di mercato (OHLCV)
-- gestire un portafoglio e il suo storico
+- gestire portafoglio e storico operazioni
 - generare segnali e report settimanali
-- eseguire backtest sulle strategie
+- eseguire backtest su strategie personalizzate
 
 ---
 
@@ -20,25 +21,27 @@ Costruire un sistema semplice e scalabile per:
 ```
 
 .
-├── config/               # Configurazioni del progetto
+├── config/               # Configurazioni statiche del progetto
 ├── logs/                 # File di log con rotazione automatica
-├── src/                  # Codice principale (classi)
+├── src/                  # Codice di business (classi principali)
 │   ├── drive_manager.py
 │   ├── logger.py
 │   └── ...
-├── scripts/              # Script eseguibili
+├── scripts/              # Script richiamati da systemd o scheduler
 │   ├── tester.py
 │   ├── daily_run.py
 │   └── weekly_run.py
-├── docs/                 # Documentazione, chiavi, note
+├── services/             # Servizi infrastrutturali (supporto agli script)
+│   └── get_db_secret.py  # Recupero credenziali DB dal Secret Manager
+├── data/
+│   └── db/               # Volume persistente PostgreSQL
+├── manager.sh            # Script di gestione ambiente locale e container
+├── docker-compose.yml    # Definizione del servizio PostgreSQL (container)
+├── docs/                 # Documentazione e credenziali
 │   └── service_account.json
 └── requirements.txt
 
 ````
-
-Ogni classe in `src/` è autonoma e può essere richiamata dagli script in `scripts/`. 
-Le classi non si devono richiamare tra di loro ma devono essere richiamate dai 
-file all'interno di `scripts/`
 
 ---
 
@@ -52,23 +55,26 @@ source .env/bin/activate
 pip install -r requirements.txt
 ````
 
+---
+
 ### 2️⃣ Credenziali Google Cloud
 
-Il progetto utilizza un **Service Account JSON** per autenticarsi.
+Il progetto utilizza un **Service Account** per autenticarsi ai servizi Google
+(Secret Manager, Drive, Sheets, ecc.).
 
 1. Il file si trova in:
 
-   ```
+   ```bash
    docs/service_account.json
    ```
 
-2. Esporta la variabile d’ambiente **prima di ogni sessione**:
+2. Esporta la variabile d’ambiente prima di ogni sessione:
 
    ```bash
    export GOOGLE_APPLICATION_CREDENTIALS="$HOME/Progetti/wheres_my_money/docs/service_account.json"
    ```
 
-3. Puoi verificare:
+3. Verifica che sia corretta:
 
    ```bash
    echo $GOOGLE_APPLICATION_CREDENTIALS
@@ -76,50 +82,130 @@ Il progetto utilizza un **Service Account JSON** per autenticarsi.
 
 ---
 
-## 🧩 Modulo DriveManager
+## 🐘 Database & Docker
 
-### Scopo
+### Descrizione
 
-Gestisce:
+Il database **PostgreSQL** non è installato localmente ma eseguito in container Docker per:
 
-* accesso a Google Secret Manager
-* autenticazione su Google Sheets
-* lettura della lista tickers dal foglio "Universe"
+* evitare conflitti o carico inutile sul sistema
+* mantenere un ambiente coerente tra dev e produzione
+* poter ripristinare facilmente lo stato del DB
 
-### Uso base
+### File: `docker-compose.yml`
 
-```python
-from src.drive_manager import DriveManager
+```yaml
+services:
+  db:
+    image: postgres:16
+    container_name: money_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-dm = DriveManager()
-tickers = dm.get_universe_tickers()
-print(tickers)
 ```
 
-### Log di esempio
+### Note
+
+* Il volume `./data/db` conserva i dati tra un riavvio e l’altro.
+  Se non esiste, viene creato automaticamente da Docker.
+* Le credenziali (`DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`)
+  vengono caricate automaticamente dal **Google Secret Manager**.
+
+---
+
+## 🔐 Secret Manager
+
+Il recupero delle credenziali è gestito dal modulo:
 
 ```
-2025-10-12 15:51:51 | INFO | DriveManager | Secret 'service_account' caricato correttamente.
-2025-10-12 15:51:51 | INFO | DriveManager | Autenticazione Google Sheets completata.
-2025-10-12 15:51:54 | INFO | DriveManager | Lettura Universe completata: 33 tickers trovati.
+services/get_db_secret.py
+```
+
+Questo script:
+
+1. Si autentica usando `GOOGLE_APPLICATION_CREDENTIALS`
+2. Recupera i secret dal progetto GCP
+3. Esporta le variabili d’ambiente per Docker Compose
+
+### Esecuzione diretta (debug)
+
+```bash
+python -m services.get_db_secret
+```
+
+Output atteso:
+
+```
+[2025-10-18 10:32:10] 🔐 Recupero credenziali dal Google Secret Manager...
+DB_USER=postgres
+DB_PASSWORD=********
+DB_NAME=money
+DB_PORT=5432
+```
+
+---
+
+## 🧭 Gestione ambiente: `manager.sh`
+
+Lo script `manager.sh` centralizza le operazioni principali di sviluppo:
+
+### Comandi disponibili
+
+```bash
+bash manager.sh start     # Avvia il container e imposta le variabili dal Secret Manager
+bash manager.sh stop      # Ferma il container
+bash manager.sh restart   # Riavvia il container
+bash manager.sh logs      # Mostra i log del container
+bash manager.sh status    # Mostra lo stato del DB
+```
+
+Esempio:
+
+```bash
+bash manager.sh start
+```
+
+Output atteso:
+
+```
+[2025-10-18 11:01:14] 🔐 Recupero credenziali dal Google Secret Manager...
+[2025-10-18 11:01:16] 📦 Avvio container PostgreSQL (docker compose up -d)...
+[2025-10-18 11:01:18] ✅ Database in esecuzione e pronto all'uso!
 ```
 
 ---
 
 ## 🧰 Logging
 
-Ogni modulo usa `get_logger(__name__)` per loggare sia su:
+Ogni modulo utilizza `get_logger(__name__)` per loggare su:
 
-* file dedicato in `logs/`
-* standard output
+* file in `logs/`
+* output standard (console)
 
-Log ruotano automaticamente (max 1MB, 3 backup).
+I log ruotano automaticamente (max 1MB, 3 backup).
 
 ---
 
 ## 🧠 Convenzioni di esecuzione
 
-Tutti gli script vanno eseguiti come moduli (per mantenere import coerenti):
+Tutti gli script Python vanno eseguiti come **moduli**, ad esempio:
 
 ```bash
 python -m scripts.tester
@@ -127,32 +213,32 @@ python -m scripts.daily_run
 python -m scripts.weekly_run
 ```
 
-Questo assicura che Python riconosca correttamente `src` e `config` come package.
+Questo assicura import coerenti e riconoscimento corretto dei package (`src`, `config`, `services`).
 
 ---
 
 ## 🧩 Prossimi step
 
 1. ✅ Completato: `DriveManager`
-2. 🛠️ In corso: `DatabaseManager` (connessione Postgres, creazione tabelle)
-3. ⏩ Poi: `YFinanceManager` (aggiornamento dati OHLCV)
-4. 📊 Dopo: `PortfolioManager`, `RiskManager`, `Backtester`
-5. 🧾 Infine: `Reporter` + servizi `daily` e `weekly`
+2. ✅ Completato: integrazione Secret Manager + container PostgreSQL
+3. 🛠️ In corso: `DatabaseManager` (connessione e creazione tabelle)
+4. ⏩ Poi: `YFinanceManager` (aggiornamento dati OHLCV)
+5. 📊 Dopo: `PortfolioManager`, `RiskManager`, `Backtester`
+6. 🧾 Infine: `Reporter` + servizi `daily` e `weekly`
 
 ---
 
 ## 💭 Note di design
 
-* **Semplicità prima di tutto**: nessuna astrazione inutile.
-* Tutti i moduli hanno una sola responsabilità chiara.
-* I segreti vivono su Google Secret Manager, non in file locali.
-* Le configurazioni non sensibili vivono in `config/config.py`.
-* Tutto è pensato per essere schedulabile via `systemd`.
+* **Chiarezza prima di tutto**: moduli piccoli, responsabilità singola.
+* **Isolamento**: `src` non richiama mai direttamente `scripts` o `services`.
+* **Sicurezza**: i segreti vivono solo nel Secret Manager.
+* **Manutenibilità**: tutta la gestione ambiente è centralizzata in `manager.sh`.
+* **Deploy-ready**: la stessa struttura sarà utilizzata su Google Cloud VM.
 
 ---
 
-*Ultimo aggiornamento:* `2025-10-12`
+*Ultimo aggiornamento:* `2025-10-18`
 *Autore:* Leonardo Bitto
 
-````
 
