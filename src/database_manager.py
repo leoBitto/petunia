@@ -42,6 +42,14 @@ class DatabaseManager:
             self.conn.close()
             self.logger.info("Connessione al DB chiusa.")
 
+    def query(self, sql: str, params=None):
+        with self.conn.cursor() as cur:
+            cur.execute(sql, params or ())
+            try:
+                return cur.fetchall()
+            except Exception:
+                return []
+
     # ----------------------
     # Schema management
     # ----------------------
@@ -108,20 +116,41 @@ class DatabaseManager:
     # ----------------------
     # OHLC
     # ----------------------
-    def upsert_ohlc(self, data: dict):
-        """Inserisce o aggiorna una riga OHLC"""
-        with self.conn.cursor() as cur:
-            cur.execute("""
-            INSERT INTO ohlc(ticker, date, open, high, low, close, volume)
-            VALUES (%(ticker)s, %(date)s, %(open)s, %(high)s, %(low)s, %(close)s, %(volume)s)
-            ON CONFLICT (ticker, date) DO UPDATE
-            SET open = EXCLUDED.open,
-                high = EXCLUDED.high,
-                low = EXCLUDED.low,
-                close = EXCLUDED.close,
-                volume = EXCLUDED.volume;
-            """, data)
-            self.conn.commit()
+    def upsert_ohlc(self, data: list[tuple]):
+        """
+        Inserisce o aggiorna più righe OHLC in batch usando psycopg 3.
+        
+        Parametri:
+        - data: lista di tuple (ticker, date, open, high, low, close, volume)
+        
+        Requisiti:
+        - Ogni tupla deve rispettare l'ordine esatto delle colonne nella query.
+        - L'ordine delle tuple nella lista non importa.
+        """
+        if not data:
+            self.logger.info("Nessun dato da inserire.")
+            return
+
+        sql = """
+        INSERT INTO ohlc(ticker, date, open, high, low, close, volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, date) DO UPDATE
+        SET open = EXCLUDED.open,
+            high = EXCLUDED.high,
+            low = EXCLUDED.low,
+            close = EXCLUDED.close,
+            volume = EXCLUDED.volume;
+        """
+
+        try:
+            with self.conn.cursor() as cur:
+                cur.executemany(sql, data)
+                self.conn.commit()
+            self.logger.info(f"[DB] Inseriti/aggiornati {len(data)} record OHLC.")
+        except Exception as e:
+            self.conn.rollback()
+            self.logger.error(f"[DB] Errore durante upsert batch OHLC: {e}")
+            raise
 
     def get_ohlc(self, tickers: list[str], start_date: str, end_date: str) -> List[dict]:
         """Restituisce OHLC tra due date per uno o più ticker"""

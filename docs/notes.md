@@ -217,14 +217,29 @@ Questo assicura import coerenti e riconoscimento corretto dei package (`src`, `c
 
 ---
 
-## 🧩 Prossimi step
+## 🧩 Prossimi step aggiornati
 
-1. ✅ Completato: `DriveManager`
-2. ✅ Completato: integrazione Secret Manager + container PostgreSQL
-3. 🛠️ In corso: `DatabaseManager` (connessione e creazione tabelle)
-4. ⏩ Poi: `YFinanceManager` (aggiornamento dati OHLCV)
-5. 📊 Dopo: `PortfolioManager`, `RiskManager`, `Backtester`
-6. 🧾 Infine: `Reporter` + servizi `daily` e `weekly`
+✅ Completato: DriveManager
+✅ Completato: integrazione Secret Manager + container PostgreSQL
+✅ Completato: DatabaseManager (connessione, creazione tabelle, batch insert)
+✅ Completato: YFinanceManager (fetch giornaliero e storico, normalizzazione dati)
+
+⏩ Prossimo: PortfolioManager
+Gestione portafogli e posizioni.
+
+⏩ RiskManager
+Calcolo rischi e indicatori sui portafogli.
+
+⏩ Backtester
+Simulazioni e test di strategie.
+
+⏩ Reporter + servizi daily e weekly
+Generazione report PDF/CSV.
+
+⏩ Servizi schedulati per aggiornamenti giornalieri e settimanali.
+servizio aggiornamento giornaliero ohlc
+servizio aggiornamento giornaliero portfolio
+servizio aggiornamento settimanale dei segnali
 
 ---
 
