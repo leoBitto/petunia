@@ -3,20 +3,27 @@ import json
 import sys
 import logging
 
-# Disabilitiamo qualsiasi log affinché lo stdout contenga SOLO il JSON
+# Disabilitiamo i log per avere solo output JSON
 logging.disable(logging.CRITICAL)
-
-# Import dopo aver disabilitato i log
 from src.drive_manager import DriveManager
 
-def main():
+def get_db_credentials() -> dict:
+    """
+    Restituisce un dizionario contenente le credenziali del DB
+    prese dal Secret Manager.
+    """
     try:
         dm = DriveManager()
         secret = dm._get_secret("db_info")
-        # stampa SOLO il JSON pulito su stdout
-        print(json.dumps(secret))
+        return secret
     except Exception as e:
-        # Errori su stdout in JSON con campo "error" e uscita non-zero
+        raise RuntimeError(f"Errore nel recupero dei secrets DB: {e}")
+
+def main():
+    try:
+        creds = get_db_credentials()
+        print(json.dumps(creds))
+    except Exception as e:
         print(json.dumps({"error": str(e)}))
         sys.exit(1)
 
