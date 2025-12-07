@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 import psycopg
 from psycopg.rows import dict_row
-
+import pandas as pd
 from services.get_db_secret import get_db_credentials
 from src.logger import get_logger
 
@@ -76,7 +76,6 @@ class DatabaseManager:
                 size INT,
                 price NUMERIC,
                 updated_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT now()
             );
 
             CREATE TABLE IF NOT EXISTS portfolio_cash (
@@ -171,26 +170,130 @@ class DatabaseManager:
     # ----------------------
     # Portfolio
     # ----------------------
-    def update_portfolio(self, data: dict):
-        """Aggiorna o inserisce una posizione nel portafoglio"""
+    # ----------------------
+    # Portfolio Snapshot
+    # ----------------------
+    def _load_portfolio_snapshot(self) -> pd.DataFrame:
+        """Carica l'intero portafoglio come DataFrame."""
+        query = "SELECT * FROM portfolio ORDER BY ticker ASC;"
         with self.conn.cursor() as cur:
-            cur.execute("""
-            INSERT INTO portfolio(ticker, stop_loss, profit_take, size, price, updated_at)
-            VALUES (%(ticker)s, %(stop_loss)s, %(profit_take)s, %(size)s, %(price)s, %(updated_at)s)
-            ON CONFLICT (ticker) DO UPDATE
-            SET stop_loss = EXCLUDED.stop_loss,
-                profit_take = EXCLUDED.profit_take,
-                size = EXCLUDED.size,
-                price = EXCLUDED.price,
-                updated_at = EXCLUDED.updated_at;
-            """, data)
-            self.conn.commit()
+            cur.execute(query)
+            rows = cur.fetchall()
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
 
-    def add_trade(self, data: dict):
-        """Aggiunge una nuova operazione al portfolio_trades"""
+    def _save_portfolio_snapshot(self, df: pd.DataFrame):
+        """
+        Sovrascrive completamente la tabella 'portfolio' con il contenuto del DataFrame.
+        """
+        if df.empty:
+            self.logger.warning("[DB] DataFrame vuoto: portfolio non aggiornato.")
+            return
+
+        self.logger.info("[DB] Salvataggio snapshot portfolio (truncate + insert)...")
         with self.conn.cursor() as cur:
-            cur.execute("""
-            INSERT INTO portfolio_trades(ticker, size, price, action, date)
-            VALUES (%(ticker)s, %(size)s, %(price)s, %(action)s, %(date)s);
-            """, data)
+            cur.execute("TRUNCATE TABLE portfolio;")
+            records = df.to_dict(orient="records")
+            cur.executemany("""
+                INSERT INTO portfolio(ticker, stop_loss, profit_take, size, price, updated_at)
+                VALUES (%(ticker)s, %(stop_loss)s, %(profit_take)s, %(size)s, %(price)s, %(updated_at)s);
+            """, records)
             self.conn.commit()
+        self.logger.info(f"[DB] Salvati {len(df)} record in 'portfolio'.")
+
+
+    # ----------------------
+    # Portfolio Cash
+    # ----------------------
+    def _load_portfolio_cash(self) -> pd.DataFrame:
+        """Carica la situazione di cassa del portafoglio."""
+        query = "SELECT * FROM portfolio_cash ORDER BY updated_at DESC;"
+        with self.conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+    def _save_portfolio_cash(self, df: pd.DataFrame):
+        """
+        Sovrascrive completamente la tabella 'portfolio_cash' con il contenuto del DataFrame.
+        """
+        if df.empty:
+            self.logger.warning("[DB] DataFrame vuoto: portfolio_cash non aggiornato.")
+            return
+
+        self.logger.info("[DB] Salvataggio snapshot portfolio_cash (truncate + insert)...")
+        with self.conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE portfolio_cash;")
+            records = df.to_dict(orient="records")
+            cur.executemany("""
+                INSERT INTO portfolio_cash(cash, currency, updated_at)
+                VALUES (%(cash)s, %(currency)s, %(updated_at)s);
+            """, records)
+            self.conn.commit()
+        self.logger.info(f"[DB] Salvati {len(df)} record in 'portfolio_cash'.")
+
+
+    # ----------------------
+    # Portfolio Trades
+    # ----------------------
+    def _load_portfolio_trades(self) -> pd.DataFrame:
+        """Carica la cronologia delle operazioni di trading."""
+        query = "SELECT * FROM portfolio_trades ORDER BY date ASC;"
+        with self.conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+    def _save_portfolio_trades(self, df: pd.DataFrame):
+        """
+        Inserisce nuovi record nella tabella 'portfolio_trades' (append only).
+        """
+        if df.empty:
+            self.logger.warning("[DB] DataFrame vuoto: nessuna operazione salvata.")
+            return
+
+        self.logger.info("[DB] Inserimento operazioni in 'portfolio_trades'...")
+        with self.conn.cursor() as cur:
+            records = df.to_dict(orient="records")
+            cur.executemany("""
+                INSERT INTO portfolio_trades(ticker, size, price, action, date)
+                VALUES (%(ticker)s, %(size)s, %(price)s, %(action)s, %(date)s);
+            """, records)
+            self.conn.commit()
+        self.logger.info(f"[DB] Salvate {len(df)} operazioni in 'portfolio_trades'.")
+
+    # -----------------------
+    # Wrapper Portfolio
+    # -----------------------
+    def load_portfolio(self) -> dict:
+        """
+        Restituisce un dizionario completo con portfolio, cash e trades.
+
+        Output:
+            {
+                "portfolio": DataFrame,
+                "cash": DataFrame,
+                "trades": DataFrame
+            }
+        """
+        self.logger.info("[DB] Caricamento completo del portafoglio...")
+        return {
+            "portfolio": self._load_portfolio_snapshot(),
+            "cash": self._load_portfolio_cash(),
+            "trades": self._load_portfolio_trades()
+        }
+
+    def save_portfolio(self, snapshot_dict: dict):
+        """
+        Salva nel database tutti i DataFrame del portafoglio.
+
+        Input:
+            {
+                "portfolio": DataFrame,
+                "cash": DataFrame,
+                "trades": DataFrame
+            }
+        """
+        self.logger.info("[DB] Salvataggio completo del portafoglio...")
+        self._save_portfolio_snapshot(snapshot_dict.get("portfolio", None))
+        self._save_portfolio_cash(snapshot_dict.get("cash", None))
+        self._save_portfolio_trades(snapshot_dict.get("trades", None))
