@@ -1,8 +1,4 @@
-Certamente\! È fondamentale tenere la documentazione allineata con il codice, specialmente dopo i cambiamenti infrastrutturali (Docker, `manager.sh`) e architetturali (`services/` vs `scripts/`) che abbiamo introdotto.
 
-Ecco una versione aggiornata e pulita del **README.md** che riflette lo stato attuale del branch `rebase` e le nuove procedure di setup.
-
-````markdown
 # 💸 Money Trading System
 
 Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a hybrid Docker architecture and Google Sheets reporting.
@@ -141,6 +137,4 @@ Released under the **MIT License**.
 ## 📚 Documentation
 
 See [`docs/DEV_NOTES.md`](https://www.google.com/search?q=./docs/DEV_NOTES.md) for detailed architectural decisions and developer guides.
-
-```
 
