@@ -28,26 +28,79 @@ class PortfolioManager:
     # Load & Save
     # ----------------------
     def load_from_db(self, snapshot_dict: dict):
-        """
-        Carica i DataFrame dal dizionario restituito dal DatabaseManager.
-        Es: {"portfolio": df1, "cash": df2, "trades": df3}
-        """
-        self.df_portfolio = snapshot_dict.get("portfolio", pd.DataFrame())
-        self.df_cash = snapshot_dict.get("cash", pd.DataFrame())
-        self.df_trades = snapshot_dict.get("trades", pd.DataFrame())
+        """Usa il dizionario restituito esattamente da db.load_portfolio()"""
+        self.logger.info("Caricamento stato Portfolio...")
+        
+        # Gestione robusta: se il DB è vuoto, usa i DF vuoti init
+        if not snapshot_dict.get("portfolio").empty:
+            self.df_portfolio = snapshot_dict["portfolio"].copy()
+            # Assicuriamoci che i tipi siano corretti per i calcoli
+            self.df_portfolio["size"] = self.df_portfolio["size"].fillna(0).astype(int)
+            self.df_portfolio["price"] = self.df_portfolio["price"].astype(float)
+        
+        if not snapshot_dict.get("cash").empty:
+            self.df_cash = snapshot_dict["cash"].copy()
+            
+        if not snapshot_dict.get("trades").empty:
+            self.df_trades = snapshot_dict["trades"].copy()
+
         self.logger.info("[Portfolio] Snapshot caricato dal DB.")
 
     def get_snapshot(self) -> dict:
         """Restituisce uno snapshot completo del portafoglio come dizionario di DataFrame."""
+        # Aggiorna timestamp prima di salvare
+        now = datetime.now()
+        if not self.df_portfolio.empty:
+            self.df_portfolio["updated_at"] = now
+        
         return {
             "portfolio": self.df_portfolio,
-            "cash": self.df_cash,
+            "cash": self.df_cash, # Nota: il cash va gestito (vedi sotto)
             "trades": self.df_trades
         }
 
     # ----------------------
     # Gestione operazioni
     # ----------------------
+
+    # --- BUSINESS LOGIC ---
+    def update_market_prices(self, current_prices: dict):
+        """
+        Aggiorna solo la colonna 'price' (Mark-to-Market).
+        Input: {'AAPL': 155.0, 'MSFT': 300.0}
+        """
+        if self.df_portfolio.empty:
+            return
+
+        now = datetime.now()
+        # Iterazione efficiente su Pandas
+        for ticker, new_price in current_prices.items():
+            mask = self.df_portfolio["ticker"] == ticker
+            if mask.any():
+                self.df_portfolio.loc[mask, "price"] = new_price
+                self.df_portfolio.loc[mask, "updated_at"] = now
+
+    def check_stops_and_targets(self) -> list:
+        """
+        Restituisce una lista di allarmi se un prezzo ha superato i livelli.
+        NON vende automaticamente (dato che operi manualmente), ma ti avvisa.
+        """
+        alerts = []
+        if self.df_portfolio.empty:
+            return alerts
+
+        for _, row in self.df_portfolio.iterrows():
+            curr = row["price"]
+            sl = row["stop_loss"]
+            tp = row["profit_take"]
+            
+            if sl and curr <= sl:
+                alerts.append(f"STOP LOSS HIT: {row['ticker']} @ {curr}")
+            elif tp and curr >= tp:
+                alerts.append(f"TARGET HIT: {row['ticker']} @ {curr}")
+        
+        return alerts
+
     def add_trade(self, ticker: str, size: int, price: float, action: str):
         """
         Registra un nuovo trade nel DataFrame trades.

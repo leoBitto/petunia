@@ -75,7 +75,7 @@ class DatabaseManager:
                 profit_take NUMERIC,
                 size INT,
                 price NUMERIC,
-                updated_at TIMESTAMP,
+                updated_at TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS portfolio_cash (
@@ -166,6 +166,53 @@ class DatabaseManager:
             cur.execute(query, tickers + [start_date, end_date])
             return cur.fetchall()
 
+    def get_ohlc_all_tickers(self, days: int = 365) -> dict:
+        """
+        Recupera lo storico degli ultimi N giorni per TUTTI i ticker nel DB.
+        Restituisce un dizionario ottimizzato per le strategie:
+        
+        Output:
+            {
+                "AAPL": pd.DataFrame(...),
+                "TSLA": pd.DataFrame(...),
+                ...
+            }
+        """
+        # Calcolo data limite
+        cutoff_date = (datetime.now() - timedelta(days=days)).date()
+        
+        # Query unica (molto più veloce di fare un loop per ogni ticker)
+        query = """
+            SELECT ticker, date, open, high, low, close, volume 
+            FROM ohlc 
+            WHERE date >= %s
+            ORDER BY ticker, date ASC;
+        """
+        
+        with self.conn.cursor() as cur:
+            cur.execute(query, (cutoff_date,))
+            rows = cur.fetchall()
+
+        if not rows:
+            self.logger.warning(f"Nessun dato OHLC trovato negli ultimi {days} giorni.")
+            return {}
+
+        # Creiamo un UNICO DataFrame gigante
+        df_all = pd.DataFrame(rows)
+        
+        # Assicuriamoci che i tipi siano corretti
+        cols_float = ['open', 'high', 'low', 'close']
+        df_all[cols_float] = df_all[cols_float].astype(float)
+        df_all['date'] = pd.to_datetime(df_all['date'])
+        
+        # TRUCCO PANDAS: Groupby per splittare in dizionario
+        # Questo crea: {'AAPL': df_aapl, 'TSLA': df_tsla, ...}
+        # È molto performante.
+        data_map = {ticker: df for ticker, df in df_all.groupby('ticker')}
+        
+        self.logger.info(f"Caricati dati storici per {len(data_map)} ticker.")
+        return data_map
+
 
     # ----------------------
     # Portfolio
@@ -183,22 +230,40 @@ class DatabaseManager:
 
     def _save_portfolio_snapshot(self, df: pd.DataFrame):
         """
-        Sovrascrive completamente la tabella 'portfolio' con il contenuto del DataFrame.
+        Aggiorna la tabella portfolio usando UPSERT (più sicuro del TRUNCATE).
+        Gestisce anche la cancellazione di posizioni chiuse (size=0).
         """
         if df.empty:
-            self.logger.warning("[DB] DataFrame vuoto: portfolio non aggiornato.")
+            self.logger.warning("[DB] DataFrame portfolio vuoto.")
             return
 
-        self.logger.info("[DB] Salvataggio snapshot portfolio (truncate + insert)...")
-        with self.conn.cursor() as cur:
-            cur.execute("TRUNCATE TABLE portfolio;")
-            records = df.to_dict(orient="records")
-            cur.executemany("""
-                INSERT INTO portfolio(ticker, stop_loss, profit_take, size, price, updated_at)
-                VALUES (%(ticker)s, %(stop_loss)s, %(profit_take)s, %(size)s, %(price)s, %(updated_at)s);
-            """, records)
-            self.conn.commit()
-        self.logger.info(f"[DB] Salvati {len(df)} record in 'portfolio'.")
+        self.logger.info("[DB] Upsert snapshot portfolio...")
+        
+        # Converto timestamp in stringa se necessario, o mi assicuro che sia datetime
+        records = df.to_dict(orient="records")
+
+        sql = """
+            INSERT INTO portfolio(ticker, stop_loss, profit_take, size, price, updated_at)
+            VALUES (%(ticker)s, %(stop_loss)s, %(profit_take)s, %(size)s, %(price)s, %(updated_at)s)
+            ON CONFLICT (ticker) DO UPDATE 
+            SET stop_loss = EXCLUDED.stop_loss,
+                profit_take = EXCLUDED.profit_take,
+                size = EXCLUDED.size,
+                price = EXCLUDED.price,
+                updated_at = EXCLUDED.updated_at;
+        """
+
+        try:
+            with self.conn.cursor() as cur:
+                cur.executemany(sql, records)
+                # Opzionale: Pulizia posizioni chiuse (size = 0)
+                cur.execute("DELETE FROM portfolio WHERE size = 0;")
+                self.conn.commit()
+            self.logger.info(f"[DB] Upsert completato per {len(df)} record.")
+        except Exception as e:
+            self.logger.error(f"[DB] Errore upsert portfolio: {e}")
+            self.conn.rollback()
+            raise
 
 
     # ----------------------
