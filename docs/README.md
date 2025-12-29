@@ -1,7 +1,6 @@
-
 # 💸 Money Trading System
 
-Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a hybrid Docker architecture and Google Sheets reporting.
+Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a hybrid Docker architecture and "Shadow Execution".
 
 ---
 
@@ -13,18 +12,20 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Last Update:** December 2025  
-**Version:** 0.3.0-alpha  
+**Version:** 0.4.0-alpha (Dev)  
 **Tracked Tickers:** 33  
 
 ---
 
 ## 🧩 Overview
 
-**Money** is a modular trading system designed to act as a "Shadow Automator" for retail trading:
-- **Hybrid Architecture:** Python application runs on host for performance/IO, Database runs containerized for stability.
-- **Smart Sync:** Automatically fetches OHLC data and synchronizes manual trades via "Shadow Execution".
-- **Strategy Engine:** Extensible Technical Analysis modules (RSI, Mean Reversion) using `pandas-ta`.
+**Money** is a modular trading system designed to act as a **"Shadow Automator"** for retail trading. It doesn't execute orders directly on the broker but manages the logic, risk, and accounting, syncing with manual execution.
+
+- **Hybrid Architecture:** Python application runs on host for I/O speed, Database runs containerized for stability.
+- **Smart Sync:** Automatically fetches OHLC data and synchronizes manual trades via "Shadow Execution" logic.
+- **Strategy Engine:** Extensible Technical Analysis modules (e.g., RSI Mean Reversion) using `pandas-ta`.
 - **Risk First:** Core focus on Position Sizing and ATR-based Stop Loss management.
+- **Backtesting:** Event-driven engine to simulate strategies on historical data.
 
 ---
 
@@ -32,32 +33,35 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 
 ```text
 money/
-├── services/                 # Entry points (Systemd triggers)
+├── services/                 # Entry points
 │   ├── daily_run.py          # Daily sync & mark-to-market
-│   └── weekly_run.py         # Strategy execution & reporting
+│   ├── weekly_run.py         # Strategy execution & reporting
+│   └── backtest.py           # Historical simulation engine
 ├── src/                      # Core Logic Library
 │   ├── database_manager.py   # PostgreSQL Wrapper (UPSERT logic)
-│   ├── portfolio_manager.py  # In-Memory Portfolio Logic
-│   ├── strategy_base.py      # Abstract Strategy Class
-│   └── ...
-├── data/                     # Local Data Persistence
+│   ├── portfolio_manager.py  # In-Memory Portfolio & Trade Logic
+│   ├── risk_manager.py       # Position Sizing & Stop Loss Calculator
+│   ├── strategy_base.py      # Abstract Strategy Interface
+│   └── strategies/           # Concrete implementations (RSI, etc.)
+├── data/                     # Local Persistence
 │   ├── db/                   # PostgreSQL Docker Volume
 │   └── orders/               # Pending orders (JSON) for shadow sync
 ├── config/                   # Configuration files
-├── manager.sh                # 🛠️ Unified Management Script (Setup, Start, Logs)
+├── manager.sh                # 🛠️ Unified Management Script
 └── docker-compose.yml        # Infrastructure Definition (PostgreSQL)
-````
 
------
+```
+
+---
 
 ## 🚀 Quick Start
 
 ### 1️⃣ Prerequisites
 
-  * Linux Environment (Debian/Ubuntu recommended)
-  * Docker & Docker Compose
-  * Python 3.11+
-  * `jq` (installed automatically by setup script if possible)
+* Linux Environment (Debian/Ubuntu recommended)
+* Docker & Docker Compose
+* Python 3.11+
+* `jq` (installed automatically by setup script)
 
 ### 2️⃣ Setup
 
@@ -69,6 +73,7 @@ cd money
 
 # Initializes venv, installs requirements, creates directory structure
 ./manager.sh setup
+
 ```
 
 ### 3️⃣ Configuration
@@ -76,65 +81,66 @@ cd money
 Place your **Google Service Account** JSON key in:
 `docs/service_account.json`
 
-(This key is used to access Google Secret Manager for DB credentials and Google Sheets).
-
 ### 4️⃣ Run
 
 Start the infrastructure (Database Container):
 
 ```bash
 ./manager.sh start
+
 ```
 
 Check status:
 
 ```bash
 ./manager.sh status
+
 ```
 
------
+---
 
 ## 🧠 Workflow
 
-### 🟢 Daily Routine (Monday - Thursday)
+### 🟢 Daily Routine (Monday - Friday)
 
-  * Runs `services/daily_run.py`.
-  * Updates OHLC data from Yahoo Finance.
-  * Syncs Portfolio state (Mark-to-Market).
-  * Checks for "Shadow Orders" (trades executed manually but not yet logged).
+* Runs `services/daily_run.py`.
+* Updates OHLC data from Yahoo Finance.
+* **Mark-to-Market:** Updates portfolio value based on daily Close.
+* **Shadow Sync:** Converts pending orders into executed trades if price conditions were met.
 
-### 🔴 Weekly Routine (Friday)
+### 🔴 Weekly Routine (Friday/Weekend)
 
-  * Runs `services/weekly_run.py`.
-  * Executes Strategies (e.g., RSI Mean Reversion).
-  * Risk Manager calculates Position Size & Stops.
-  * Generates a Report (Google Sheet) for weekend review.
+* Runs `services/weekly_run.py`.
+* **Strategy:** Executes Technical Analysis (e.g., RSI Mean Reversion).
+* **Risk:** Calculates Position Size (2% Rule) & Stop Loss (2x ATR).
+* **Report:** Generates a report for manual execution on the broker.
 
------
+---
 
 ## 🧭 Roadmap
 
 | Status | Module | Description |
-| :---: | :--- | :--- |
+| --- | --- | --- |
 | ✅ | **Infrastructure** | `manager.sh`, Dockerized PostgreSQL, Secret Manager |
 | ✅ | **DriveManager** | Google Sheets access & Universe loading |
 | ✅ | **DatabaseManager** | Robust PostgreSQL wrapper with UPSERT support |
-| ✅ | **PortfolioManager** | In-memory state management (Cash, Positions, History) |
-| ✅ | **DataFetcher** | YFinance wrapper with normalization |
-| 🔄 | **StrategyEngine** | Base class defined. Implementing RSI/Mean Reversion |
-| ⏳ | **RiskManager** | ATR-based sizing & Stop Loss logic (Next Step) |
+| ✅ | **PortfolioManager** | In-memory state management (Cash, Positions, Trades) |
+| ✅ | **StrategyEngine** | Base class + RSI Strategy (pandas-ta) |
+| ✅ | **RiskManager** | ATR-based sizing, Stop Loss, Cash Management |
+| ✅ | **Backtester** | Event-driven simulation engine with Equity Curve |
+| ⏳ | **Services** | Daily/Weekly orchestrators (In Progress) |
 | ⏳ | **Reporter** | Automated weekly reporting |
 
------
+---
 
 ## 📄 License
 
 Released under the **MIT License**.
 © 2025 Leonardo Bitto
 
------
+---
 
 ## 📚 Documentation
 
-See [`docs/DEV_NOTES.md`](https://www.google.com/search?q=./docs/DEV_NOTES.md) for detailed architectural decisions and developer guides.
+Detailed documentation is currently maintained within the code `docstrings` and in the `docs/` folder.
 
