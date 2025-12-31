@@ -16,8 +16,35 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - money_net
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+  app:
+    build: .
+    container_name: money_app
+    restart: "no"
+    user: "${UID}:${GID}"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Data Persistence
+      - ./data:/app/data
+      # Secret Injection (Mounting the credentials folder)
+      - ./config/credentials:/app/config/credentials
+      # (Optional) Live Code Reload for Dev
+      # - ./src:/app/src 
+      # - ./services:/app/services
+    networks:
+      - money_net
+
+networks:
+  money_net:
+    driver: bridge

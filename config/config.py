@@ -1,16 +1,28 @@
-# config/config.py
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-GCP_PROJECT_ID = "trading-469418"
-SERVICE_ACCOUNT_SECRET_NAME = "service_account"
+# Carica il .env locale se presente (utile per sviluppo fuori da docker)
+load_dotenv()
 
+class Config:
+    # 1. DATABASE
+    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+    DB_HOST = os.getenv("DB_HOST", "db") # Default 'db' per rete docker
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "money_db")
 
-UNIVERSE_SHEET_ID = "1Uh3S3YCyvupZ5yZh2uDi0XYGaZIkEkupxsYed6xRxgA"
-REPORT_SHEET_ID = "1fGTT6O197auwyHGnEBKwvHm3oZwwWz9r8Nm4hz76jKM"
+    # 2. GOOGLE CLOUD
+    # Il percorso è fisso perché Docker lo monterà sempre qui
+    GOOGLE_KEY_PATH = Path("/app/config/credentials/service_account.json")
+    
+    # IDs Sheets
+    UNIVERSE_SHEET_ID = os.getenv("UNIVERSE_SHEET_ID")
+    REPORT_SHEET_ID = os.getenv("REPORT_SHEET_ID")
+    GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
+    
+    # 3. APP
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-BASE_CURRENCY = "USD"
-MAX_POSITIONS = 10
-
-
-DATA_YEARS_BACK = 1
-DATA_TIMEZONE = "America/New_York"
-
+config = Config()

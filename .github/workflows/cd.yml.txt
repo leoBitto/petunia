@@ -1,0 +1,48 @@
+name: CD - Deploy to VM
+
+# Gira solo quando si pusha sul branch 'main' (Produzione)
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VM via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # 1. Vai nella cartella del progetto (creala se non esiste)
+            mkdir -p ~/money
+            cd ~/money
+
+            # 2. Aggiorna il codice
+            # Se è la prima volta, clona. Altrimenti pulla.
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/leoBitto/money.git .
+            else
+              git pull origin main
+            fi
+
+            # 3. Inietta i Segreti (Zero Trust)
+            # Creiamo il file .env dai segreti di GitHub
+            echo "${{ secrets.ENV_FILE }}" > .env
+            
+            # Creiamo il service_account.json
+            # Decodifichiamo dal Base64 salvato su GitHub
+            mkdir -p config/credentials
+            echo "${{ secrets.GCP_SA_JSON_BASE64 }}" | base64 -d > config/credentials/service_account.json
+
+            # 4. Riavvia / Ricostruisci con il Manager
+            chmod +x manager.sh
+            ./manager.sh setup
+            ./manager.sh start
+            
+            echo "🚀 Deployment Complete!"
