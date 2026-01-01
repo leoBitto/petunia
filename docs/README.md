@@ -1,4 +1,7 @@
-# 💸 Money Trading System
+<div align="center">
+  <img src="docs/images/petunia_logo.png" width="200" alt="Petunia Logo">
+  <h1>Petunia Trading System</h1>
+</div>
 
 Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a fully Dockerized architecture and "Shadow Execution".
 
@@ -6,7 +9,7 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 
 ## 📊 Status
 
-![CI Status](https://github.com/leoBitto/money/actions/workflows/ci.yml/badge.svg)
+![CI Status](https://github.com/leoBitto/petunia/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Docker](https://img.shields.io/badge/docker-compose-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -19,7 +22,7 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 
 ## 🧩 Overview
 
-**Money** is a modular trading system designed to act as a **"Shadow Automator"** for retail trading. It doesn't execute orders directly on the broker but manages the logic, risk, and accounting, syncing with manual execution via Google Sheets.
+**Petunia** is a modular trading system designed to act as a **"Shadow Automator"** for retail trading. It doesn't execute orders directly on the broker but manages the logic, risk, and accounting, syncing with manual execution via Google Sheets.
 
 - **Containerized Architecture:** Both the Application (Python) and the Database (PostgreSQL) run in isolated Docker containers for maximum stability and reproducibility.
 - **Smart Sync:** Automatically fetches OHLC data and synchronizes manual trades via "Shadow Execution" logic.
@@ -32,7 +35,7 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ## ⚙️ Project Structure
 
 ```text
-money/
+petunia/
 ├── .github/workflows/        # CI/CD Pipelines (Linting & Deploy)
 ├── services/                 # Entry points (executed inside Docker)
 │   ├── daily_run.py          # Daily sync & mark-to-market
@@ -68,8 +71,8 @@ money/
 The project includes a unified manager script to handle environment setup and container building.
 
 ```bash
-git clone [https://github.com/leoBitto/money.git](https://github.com/leoBitto/money.git)
-cd money
+git clone [https://github.com/leoBitto/petunia.git](https://github.com/leoBitto/petunia.git)
+cd petunia
 
 # 1. Configure Environment
 cp .env.example .env

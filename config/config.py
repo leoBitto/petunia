@@ -7,11 +7,12 @@ load_dotenv()
 
 class Config:
     # 1. DATABASE
-    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_USER = os.getenv("DB_USER", "petunia_user") 
     DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
-    DB_HOST = os.getenv("DB_HOST", "db") # Default 'db' per rete docker
+    # Modifica: default host 'db' va bene, ma il nome del container nel docker-compose cambierà
+    DB_HOST = os.getenv("DB_HOST", "db") 
     DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "money_db")
+    DB_NAME = os.getenv("DB_NAME", "petunia_db") 
 
     # 2. GOOGLE CLOUD
     # Il percorso è fisso perché Docker lo monterà sempre qui

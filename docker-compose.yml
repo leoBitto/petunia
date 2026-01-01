@@ -1,7 +1,8 @@
 services:
   db:
     image: postgres:16
-    container_name: money_db
+    # Modifica: nome container aggiornato
+    container_name: petunia_db 
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -17,7 +18,8 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - money_net
+      # Modifica: nome rete aggiornato
+      - petunia_net 
     logging:
       driver: "json-file"
       options:
@@ -26,7 +28,8 @@ services:
 
   app:
     build: .
-    container_name: money_app
+    # Modifica: nome container aggiornato
+    container_name: petunia_app 
     restart: "no"
     user: "${UID}:${GID}"
     env_file:
@@ -43,8 +46,10 @@ services:
       # - ./src:/app/src 
       # - ./services:/app/services
     networks:
-      - money_net
+      # Modifica: nome rete aggiornato
+      - petunia_net 
 
 networks:
-  money_net:
+  # Modifica: definizione rete aggiornata
+  petunia_net: 
     driver: bridge
