@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/images/petunia_logo.png" width="200" alt="Petunia Logo">
+  <img src="images/petunia_logo.png" width="200" alt="Petunia Logo">
   <h1>Petunia Trading System</h1>
   <p><em>"Petunia" is a playful derivative of the Latin word <b>Pecunia</b> (money/wealth),<br>symbolizing organic growth in a digital financial environment.</em></p>
 </div>
