@@ -1,12 +1,15 @@
 # src/database_manager.py
 from datetime import datetime
 from typing import List, Optional
+# src/database_manager.py
+from datetime import datetime
+from typing import List, Optional
 import psycopg
 from psycopg.rows import dict_row
 import pandas as pd
-from services.get_db_secret import get_db_credentials
+# RIMOSSO: from services.get_db_secret import get_db_credentials
+from config import config  # <--- USIAMO QUESTO
 from src.logger import get_logger
-
 
 class DatabaseManager:
     """
@@ -20,15 +23,15 @@ class DatabaseManager:
         self._connect()
 
     def _connect(self):
-        """Crea la connessione usando i secrets dal Secret Manager"""
+        """Crea la connessione usando le variabili d'ambiente (via config)."""
         try:
-            creds = get_db_credentials()
+            # ORA LEGGIAMO DA CONFIG, NON DA FUNZIONI ESTERNE
             self.conn = psycopg.connect(
-                host=creds["DB_HOST"],
-                port=int(creds["DB_PORT"]),
-                dbname=creds["DB_NAME"],
-                user=creds["DB_USER"],
-                password=creds["DB_PASSWORD"],
+                host=config.DB_HOST,
+                port=int(config.DB_PORT),
+                dbname=config.DB_NAME,
+                user=config.DB_USER,
+                password=config.DB_PASSWORD,
                 row_factory=dict_row
             )
             self.logger.info("Connessione al DB PostgreSQL stabilita.")

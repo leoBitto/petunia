@@ -1,7 +1,6 @@
 import json
 import pandas as pd
 import gspread
-from google.cloud import secretmanager
 from google.oauth2.service_account import Credentials
 from src.logger import get_logger
 from config import config
@@ -25,27 +24,29 @@ class DriveManager:
         self.gsheet_client = None
         self._authenticate()
 
-    def _get_secret(self, secret_name: str, version: str = "latest") -> dict:
-        """Recupera un secret dal Google Cloud Secret Manager."""
-        try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_path = f"projects/{config.GCP_PROJECT_ID}/secrets/{secret_name}/versions/{version}"
-            response = client.access_secret_version(name=secret_path)
-            secret_data = json.loads(response.payload.data.decode("UTF-8"))
-            return secret_data
-        except Exception as e:
-            self.logger.error(f"Errore recupero secret '{secret_name}': {e}")
-            raise
+    # def _get_secret(self, secret_name: str, version: str = "latest") -> dict:
+        # """Recupera un secret dal Google Cloud Secret Manager."""
+        # try:
+            # client = secretmanager.SecretManagerServiceClient()
+            # secret_path = f"projects/{config.GCP_PROJECT_ID}/secrets/{secret_name}/versions/{version}"
+            # response = client.access_secret_version(name=secret_path)
+            # secret_data = json.loads(response.payload.data.decode("UTF-8"))
+            # return secret_data
+        # except Exception as e:
+            # self.logger.error(f"Errore recupero secret '{secret_name}': {e}")
+            # raise
 
     def _authenticate(self):
-        """Autentica il client gspread usando il Service Account recuperato dal Secret Manager."""
+        """Autentica il client gspread usando il file JSON locale."""
         try:
-            service_account_info = self._get_secret(config.SERVICE_ACCOUNT_SECRET_NAME)
-            creds = Credentials.from_service_account_info(
-                service_account_info, scopes=self.DEFAULT_SCOPES
+            # LEGGE DAL FILE SYSTEM LOCALE
+            # Il path è gestito da config.py (/app/config/credentials/service_account.json)
+            creds = Credentials.from_service_account_file(
+                str(config.GOOGLE_KEY_PATH), 
+                scopes=self.DEFAULT_SCOPES
             )
             self.gsheet_client = gspread.authorize(creds)
-            self.logger.info("Autenticazione Google Sheets completata.")
+            self.logger.info("Autenticazione Google Sheets completata (File Locale).")
         except Exception as e:
             self.logger.critical(f"Errore autenticazione Google: {e}")
             raise
