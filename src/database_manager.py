@@ -8,7 +8,7 @@ import psycopg
 from psycopg.rows import dict_row
 import pandas as pd
 # RIMOSSO: from services.get_db_secret import get_db_credentials
-from config import config  # <--- USIAMO QUESTO
+from config.config import config  # <--- USIAMO QUESTO
 from src.logger import get_logger
 
 class DatabaseManager:

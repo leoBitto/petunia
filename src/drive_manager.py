@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from src.logger import get_logger
-from config import config
+from config.config import config
 
 class DriveManager:
     """
