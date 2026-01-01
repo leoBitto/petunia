@@ -18,20 +18,22 @@ fi
 
 case "$1" in
 	setup)
-        echo -e "${GREEN}Inizializzazione Petunia Environment...${NC}"
+		echo -e "${GREEN}Inizializzazione Petunia Environment...${NC}"
         
-        # 1. Creiamo le cartelle 'umane' (Log e Report) sempre
+        # 1. Creiamo le cartelle utente (Log e Credenziali)
         mkdir -p logs config/credentials
         
-        # 2. Gestione intelligente del DB
-        if [ ! -d "data/db" ]; then
-            echo "Creazione cartella DB..."
-            mkdir -p data/db
+        # 2. Gestione DB Intelligente
+        # Se la directory ESISTE (-d), stampiamo un messaggio e NON facciamo nulla.
+        if [ -d "data/db" ]; then
+            echo -e "${GREEN}Cartella DB trovata. Skipping creazione.${NC}"
         else
-            echo "Cartella DB già esistente (Skipping mkdir per evitare errori permessi)."
+            # Solo se NON esiste, proviamo a crearla
+            echo "Creazione nuova cartella DB..."
+            mkdir -p data/db
         fi
         
-        # 3. Build dei container
+        # 3. Build
         echo -e "${GREEN}Building Docker Images...${NC}"
         docker compose build
         ;;
