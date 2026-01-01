@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16
+    # Modifica: nome container aggiornato
+    container_name: petunia_db 
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      # Modifica: nome rete aggiornato
+      - petunia_net 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build: .
+    # Modifica: nome container aggiornato
+    container_name: petunia_app 
+    restart: "no"
+    user: "${UID}:${GID}"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Data Persistence
+      - ./data:/app/data
+      # Secret Injection (Mounting the credentials folder)
+      - ./config/credentials:/app/config/credentials
+      - ./logs:/app/logs
+    networks:
+      # Modifica: nome rete aggiornato
+      - petunia_net 
+
+networks:
+  # Modifica: definizione rete aggiornata
+  petunia_net: 
+    driver: bridge

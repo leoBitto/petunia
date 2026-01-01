@@ -1,23 +1,38 @@
-# Ambiente virtuale Python
-venv/
-.env/
+# --- Python & System ---
 __pycache__/
 *.pyc
-
-# File credenziali GCP
-*.json
-
-# Dati locali
-*.csv
-
-# Log
-*.log
-
-# Config personali
 .DS_Store
-.idea/
-.vscode/
+venv/
+.venv/
+env/
 
+# --- IDEs ---
+.vscode/
+.idea/
+
+# --- Secrets & Environment (CRITICAL) ---
+# Ignora il file delle variabili d'ambiente reali
+.env
+.env.*
+# MANTENIAMO il template di esempio
+!.env.example
+
+# Ignora la cartella dove metterai il JSON di Google
+config/credentials/
+
+# Ignora eventuali json residui nella cartella docs (vecchia posizione)
+docs/*.json
+
+# --- Data Persistence (Database, Orders, Reports) ---
+# Ignora tutto il contenuto della cartella data (Database Postgres, CSV report, ecc.)
+data/
+
+# Ignora file dati sparsi nella root (es. export veloci)
+*.csv
+*.xlsx
+
+# --- Logs ---
+# Ignora la cartella logs ma mantieni la struttura se c'è il .gitkeep
 logs/*
 !logs/.gitkeep
-data/*
+*.log

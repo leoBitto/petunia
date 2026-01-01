@@ -1,0 +1,10 @@
+{
+  "DB_USER": "money_user",
+  "DB_PASSWORD": "password_super_sicura_e_complessa",
+  "DB_NAME": "money_db",
+  "DB_PORT": "5432",
+  "DB_HOST": "db",
+  "UNIVERSE_SHEET_ID": "1Uh3S3YCyvupZ5yZh2uDi0XYGaZIkEkupxsYed6xRxgA",
+  "REPORT_SHEET_ID": "1fGTT6O197auwyHGnEBKwvHm3oZwwWz9r8Nm4hz76jKM",
+  "LOG_LEVEL": "INFO"
+}
