@@ -45,6 +45,7 @@ You can test the entire system on your local machine before deploying to the clo
 | :--- | :--- | :--- |
 | **Setup** | `./manager.sh setup` | Creates data directories and builds the Docker image. |
 | **Start DB** | `./manager.sh start` | Starts the PostgreSQL container in background. |
+| **Create table in DB** | `./manager.sh init` | create the tables. |
 | **Status** | `./manager.sh status` | Checks running containers. |
 | **Daily Run** | `./manager.sh daily` | Fetches OHLC data, updates portfolio, executes shadow orders. |
 | **Weekly Run** | `./manager.sh weekly` | Runs strategy engine, risk management, and updates Orders Sheet. |

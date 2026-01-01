@@ -17,18 +17,33 @@ if [ ! -f .env ]; then
 fi
 
 case "$1" in
-    setup)
-        echo -e "${GREEN}Inizializzazione Ambiente...${NC}"
-        # Creazione cartelle host per garantire i permessi corretti all'utente
-        mkdir -p data/db logs config/credentials
+	setup)
+        echo -e "${GREEN}Inizializzazione Petunia Environment...${NC}"
         
-        echo -e "${GREEN}Building Docker Image...${NC}"
+        # 1. Creiamo le cartelle 'umane' (Log e Report) sempre
+        mkdir -p logs config/credentials
+        
+        # 2. Gestione intelligente del DB
+        if [ ! -d "data/db" ]; then
+            echo "Creazione cartella DB..."
+            mkdir -p data/db
+        else
+            echo "Cartella DB già esistente (Skipping mkdir per evitare errori permessi)."
+        fi
+        
+        # 3. Build dei container
+        echo -e "${GREEN}Building Docker Images...${NC}"
         docker compose build
         ;;
 
     start)
         echo -e "${GREEN}Avvio Database...${NC}"
         docker compose up -d db
+        ;;
+
+	init)
+        echo -e "${GREEN}Inizializzazione Tabelle DB...${NC}"
+        docker compose run --rm app python -m services.init_db
         ;;
 
     daily)
