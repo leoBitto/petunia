@@ -42,9 +42,7 @@ services:
       - ./data:/app/data
       # Secret Injection (Mounting the credentials folder)
       - ./config/credentials:/app/config/credentials
-      # (Optional) Live Code Reload for Dev
-      # - ./src:/app/src 
-      # - ./services:/app/services
+      - ./logs:/app/logs
     networks:
       # Modifica: nome rete aggiornato
       - petunia_net 

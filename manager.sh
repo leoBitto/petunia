@@ -20,7 +20,7 @@ case "$1" in
     setup)
         echo -e "${GREEN}Inizializzazione Ambiente...${NC}"
         # Creazione cartelle host per garantire i permessi corretti all'utente
-        mkdir -p data/db data/orders data/reports logs config/credentials
+        mkdir -p data/db logs config/credentials
         
         echo -e "${GREEN}Building Docker Image...${NC}"
         docker compose build
