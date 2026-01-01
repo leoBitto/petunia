@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/petunia_logo.png" width="200" alt="Petunia Logo">
+  <img src="images/petunia_logo.png" width="600" alt="Petunia Logo">
   <h1>Petunia Trading System</h1>
 </div>
 
