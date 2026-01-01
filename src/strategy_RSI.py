@@ -1,16 +1,12 @@
 import pandas as pd
-import pandas_ta as ta
+import numpy as np
 from typing import Dict
 from src.strategy_base import StrategyBase
 
 class StrategyRSI(StrategyBase):
     """
     Strategia Mean Reversion basata su RSI (Relative Strength Index).
-    
-    Riferimenti dal Wiki:
-    - Buy Zone: RSI < 30 (Oversold)
-    - Sell Zone: RSI > 70 (Overbought)
-    - Risk Mgmt: Calcola ATR per impostare Stop Loss a 2x ATR
+    Implementazione NATIVA (No pandas-ta) per massima stabilità.
     """
 
     def __init__(self, rsi_period: int = 14, rsi_lower: int = 30, rsi_upper: int = 70, atr_period: int = 14):
@@ -20,59 +16,77 @@ class StrategyRSI(StrategyBase):
         self.rsi_upper = rsi_upper
         self.atr_period = atr_period
 
+    def _calculate_rsi(self, series: pd.Series, period: int) -> pd.Series:
+        """Calcolo RSI manuale usando Wilder's Smoothing (equivalente a pandas-ta)."""
+        delta = series.diff()
+        
+        # Separiamo guadagni e perdite
+        gain = delta.where(delta > 0, 0.0)
+        loss = -delta.where(delta < 0, 0.0)
+
+        # Wilder's Smoothing usa alpha = 1/period
+        alpha = 1.0 / period
+        
+        avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    def _calculate_atr(self, df: pd.DataFrame, period: int) -> pd.Series:
+        """Calcolo ATR manuale."""
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        # True Range Calculation
+        tr1 = high - low
+        tr2 = (high - close.shift()).abs()
+        tr3 = (low - close.shift()).abs()
+        
+        # Prende il massimo tra i 3 metodi per ogni riga
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        
+        # ATR è la media mobile esponenziale (Wilder's) del TR
+        atr = tr.ewm(alpha=1.0/period, adjust=False).mean()
+        return atr
+
     def compute(self, data_map: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         signals_list = []
         
-        self.logger.info(f"Avvio strategia RSI (Period: {self.rsi_period}) su {len(data_map)} ticker.")
+        self.logger.info(f"Avvio strategia RSI (Native) su {len(data_map)} ticker.")
 
         for ticker, df in data_map.items():
-            # 1. Validazione Dati
-            # Serve abbastanza storico per RSI e ATR
+            # 1. Validazione
             min_rows = max(self.rsi_period, self.atr_period) + 5
             if len(df) < min_rows:
                 continue
 
-            # Lavoriamo su una copia
-            df = df.copy()
+            # Lavoriamo su una copia per non sporcare i dati originali
+            df = df.copy().sort_values('date')
 
-            # 2. Calcolo Indicatori (Pandas-TA)
             try:
-                # Calcolo RSI
-                df.ta.rsi(length=self.rsi_period, append=True)
-                # Calcolo ATR (Fondamentale per il Risk Manager)
-                df.ta.atr(length=self.atr_period, append=True)
+                # 2. Calcolo Indicatori Manuale
+                df['RSI'] = self._calculate_rsi(df['close'], self.rsi_period)
+                df['ATR'] = self._calculate_atr(df, self.atr_period)
             except Exception as e:
-                self.logger.error(f"Errore indicatori {ticker}: {e}")
+                self.logger.error(f"Errore calcolo math {ticker}: {e}")
                 continue
 
-            # 3. Recupero Valori
-            # Nomi colonne dinamici generati da pandas-ta (es. "RSI_14", "ATRr_14")
-            col_rsi = f"RSI_{self.rsi_period}"
-            # ATR può avere nomi diversi a seconda della versione, lo cerchiamo
-            col_atr = f"ATRr_{self.atr_period}" 
-            if col_atr not in df.columns:
-                 # Fallback: a volte pandas-ta lo chiama diversamente o è l'ultima colonna aggiunta
-                 col_atr = [c for c in df.columns if "ATR" in c][-1]
-
+            # 3. Analisi Ultima Riga
             last_row = df.iloc[-1]
-            
-            rsi_val = last_row.get(col_rsi)
-            atr_val = last_row.get(col_atr, 0.0)
+            rsi_val = last_row['RSI']
+            atr_val = last_row['ATR']
+            price = last_row['close']
 
-            if pd.isna(rsi_val):
+            if pd.isna(rsi_val) or pd.isna(atr_val):
                 continue
 
-            # 4. Logica di Trading (KISS: Keep It Simple)
-            # Il wiki dice: "starts to reverse when it points down from 70... and up from 30"
-            # Implementazione Base: Compra se siamo in zona ipervenduto, Vendi se ipercomprato.
-            
+            # 4. Logica Trading
             signal = "HOLD"
-
             if rsi_val < self.rsi_lower:
                 signal = "BUY"
-                # Nota: Una strategia più avanzata controllerebbe se rsi_val > rsi_ieri 
-                # per confermare l'inversione come suggerito dal testo, ma per ora teniamo semplice.
-            
             elif rsi_val > self.rsi_upper:
                 signal = "SELL"
 
@@ -81,11 +95,11 @@ class StrategyRSI(StrategyBase):
                 "ticker": ticker,
                 "date": last_row['date'],
                 "signal": signal,
-                "atr": atr_val,  # Il Risk Manager userà questo per: Stop Loss = Price - (2 * ATR)
-                "price": last_row['close'],
+                "atr": atr_val,
+                "price": price,
                 "meta": {
-                    "rsi": rsi_val,
-                    "note": f"RSI: {rsi_val:.2f} (Triggers: <{self.rsi_lower}, >{self.rsi_upper})"
+                    "rsi": round(rsi_val, 2),
+                    "note": f"RSI: {rsi_val:.2f}"
                 }
             })
 
