@@ -1,0 +1,13 @@
+# .dockerignore
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Ignora cartelle dati e log (fondamentale per evitare errori permessi)
+data/
+logs/
+config/credentials/
