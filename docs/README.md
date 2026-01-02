@@ -4,7 +4,7 @@
   <p><em>"Petunia" is a playful derivative of the Latin word <b>Pecunia</b> (money/wealth),<br>symbolizing organic growth in a digital financial environment.</em></p>
 </div>
 
-Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a fully Dockerized architecture and "Shadow Execution".
+Automated trading data pipeline & decision support system. Fetches market data, executes technical strategies, and manages portfolio risk — featuring a fully Dockerized architecture, a visual Dashboard, and "Shadow Execution".
 
 ---
 
@@ -16,7 +16,7 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Last Update:** January 2026  
-**Version:** 1.0.0 (Stable)  
+**Version:** 1.1.0 (Dashboard Enabled)  
 **Tracked Tickers:** Dynamic (GSheet)  
 
 ---
@@ -26,8 +26,8 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 **Petunia** is a modular trading system designed to act as a **"Shadow Automator"** for retail trading. It doesn't execute orders directly on the broker but manages the logic, risk, and accounting, syncing with manual execution via Google Sheets.
 
 - **Containerized Architecture:** Both the Application (Python) and the Database (PostgreSQL) run in isolated Docker containers for maximum stability and reproducibility.
+- **Interactive Dashboard:** A Streamlit-based UI to monitor portfolio performance, visualize data, and manage system operations (Init/Reset).
 - **Smart Sync:** Automatically fetches OHLC data (Yahoo Finance) and synchronizes manual trades via "Shadow Execution" logic.
-- **Strategy Engine:** Lightweight, dependency-free Technical Analysis (Native NumPy/Pandas implementation).
 - **Risk First:** Core focus on Position Sizing and ATR-based Stop Loss management.
 - **CI/CD Integration:** Automated testing and deployment pipelines via GitHub Actions.
 
@@ -38,11 +38,13 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ```text
 petunia/
 ├── .github/workflows/        # CI/CD Pipelines (Linting & Deploy)
+├── dashboard/                # 📊 User Interface (Streamlit)
+│   ├── home.py               # Dashboard Entry Point
+│   └── components/           # UI Widgets & plotting logic
 ├── services/                 # Entry points (executed inside Docker)
 │   ├── daily_run.py          # Daily sync & mark-to-market
 │   ├── weekly_run.py         # Strategy execution & reporting
-│   ├── init_db.py            # 🛠️ Database Schema & Bootstrap
-│   └── backtest.py           # Historical simulation engine
+│   └── init_db.py            # 🛠️ Database Schema & Bootstrap
 ├── src/                      # Core Logic Library
 │   ├── database_manager.py   # PostgreSQL Wrapper (psycopg3)
 │   ├── portfolio_manager.py  # In-Memory Portfolio & Trade Logic
@@ -99,14 +101,15 @@ Start the infrastructure (Database Container):
 
 ```
 
-Initialize Schema & Bootstrap Data (1 Year History):
+**Launch the Dashboard to Initialize:**
+Unlike previous versions, system initialization is now handled via the UI.
 
-```bash
-./manager.sh init
+1. Open your browser at `http://localhost:8501`.
+2. Navigate to the **"control panel"** section.
+3. Click **"Reset Database Schema"** to create schemas.
+4. Click **"Start Data Fetch"** to bootstrap historical data.
 
-```
-
-### 4️⃣ Operations
+### 4️⃣ Manual Operations
 
 ```bash
 # Daily Routine (Market Data Sync & Portfolio Update)
@@ -139,14 +142,15 @@ Initialize Schema & Bootstrap Data (1 Year History):
 
 ## 🧭 Roadmap
 
-### v1.x - Visualization & Expansion (Current Focus)
+### v1.x - Expansion & Testing (Current Focus)
 
 | Status | Module | Description |
 | --- | --- | --- |
 | ✅ | **Core v1.0** | Stable Docker Architecture, RSI Strategy, Risk Manager |
-| ⏳ | **Dashboard** | Streamlit Frontend for visual analytics & performance tracking |
-| 📝 | **Strategies** | Add Trend Following (EMA) and Breakout strategies |
-| 📝 | **Testing** | Extensive Unit & Integration Tests (PyTest) |
+| ✅ | **Dashboard** | Streamlit Frontend for visual analytics & system management |
+| 🔄 | **Strategies** | Adding Trend Following (EMA) and Breakout strategies |
+| ⏳ | **Testing** | Extensive Unit & Integration Tests (PyTest) |
+| ⏳ | **Universe** | Scaling tracked universe to 100+ tickers |
 
 ### v2.0 - Cloud Native & DevOps
 
