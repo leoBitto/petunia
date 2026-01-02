@@ -152,7 +152,7 @@ def run_backtest(strategy_name: str = "RSI",
         "total_trades": len(df_trades[df_trades['action']=='SELL'])
     }
     
-    save_backtest_results(strategy_name, df_equity, df_trades, final_config)
+    return save_backtest_results(strategy_name, df_equity, df_trades, final_config)
 
 if __name__ == "__main__":
     # Esempio di esecuzione manuale

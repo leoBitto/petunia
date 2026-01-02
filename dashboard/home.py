@@ -38,8 +38,22 @@ c1, c2 = st.columns([2, 1])
 
 with c1:
     if not df_ohlc.empty:
+        # Ci assicuriamo che 'count' sia un intero
+        df_ohlc['count'] = df_ohlc['count'].astype(int)
+        
         st.dataframe(
-            df_ohlc.style.background_gradient(subset=['count'], cmap="Greens"),
+            df_ohlc,
+            column_config={
+                "ticker": "Ticker",
+                "last_date": "Last Update",
+                "count": st.column_config.ProgressColumn(
+                    "Data Points",
+                    help="Numero di candele OHLC salvate",
+                    format="%d",
+                    min_value=0,
+                    max_value=int(df_ohlc['count'].max())
+                ),
+            },
             use_container_width=True,
             hide_index=True
         )

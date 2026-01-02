@@ -50,7 +50,7 @@ with tab_run:
                 
                 # Immagine
                 if (p / "chart.png").exists():
-                    st.image(str(p / "chart.png"), use_column_width=True)
+                    st.image(str(p / "chart.png"), width=True)
                 
                 # Metriche da JSON
                 if (p / "config.json").exists():
@@ -70,21 +70,40 @@ with tab_run:
 with tab_history:
     st.write("📂 **Previous Runs Browser**")
     base_dir = Path("data/backtests")
+    
     if base_dir.exists():
         # Logica per esplorare le cartelle
         strategies = [x.name for x in base_dir.iterdir() if x.is_dir()]
-        sel_strat = st.selectbox("Select Strategy Folder", strategies)
         
+        # --- LAYOUT A COLONNE PER I SELETTORI ---
+        c_strat, c_run = st.columns(2)
+        
+        with c_strat:
+            sel_strat = st.selectbox("Select Strategy Folder", strategies)
+        
+        sel_run = None
         if sel_strat:
-            runs = sorted([x.name for x in (base_dir / sel_strat).iterdir()], reverse=True)
-            sel_run = st.selectbox("Select Timestamp", runs)
+            with c_run:
+                runs = sorted([x.name for x in (base_dir / sel_strat).iterdir()], reverse=True)
+                sel_run = st.selectbox("Select Timestamp", runs)
             
             if sel_run:
                 run_path = base_dir / sel_strat / sel_run
                 st.caption(f"Path: {run_path}")
+                st.markdown("---")
                 
-                if (run_path / "chart.png").exists():
-                    st.image(str(run_path / "chart.png"), use_column_width=True)
+                # Visualizzazione Dati
+                col_img, col_data = st.columns([1, 1])
                 
-                if (run_path / "trades.csv").exists():
-                    st.dataframe(pd.read_csv(run_path / "trades.csv"))
+                with col_img:
+                    if (run_path / "chart.png").exists():
+                        st.image(str(run_path / "chart.png"), width=True)
+                
+                with col_data:
+                    if (run_path / "config.json").exists():
+                        with open(run_path / "config.json") as f:
+                            conf = json.load(f)
+                        st.json(conf, expanded=False)
+
+                    if (run_path / "trades.csv").exists():
+                        st.dataframe(pd.read_csv(run_path / "trades.csv"), width=True, height=300)
