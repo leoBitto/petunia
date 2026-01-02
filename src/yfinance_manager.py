@@ -3,6 +3,7 @@ from typing import List, Dict, Tuple
 from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
+import numpy as np
 
 from src.logger import get_logger
 
@@ -53,9 +54,56 @@ class YFinanceManager:
             self.logger.warning("Nessun dato ricevuto da yfinance (data è vuoto).")
             return all_data
 
-        df_flat = data.stack(level=0, future_stack=True).reset_index()
-        df_flat['Date'] = df_flat['Date'].dt.date
-        all_data = list(df_flat[['Ticker','Date','Open','High','Low','Close','Volume']].itertuples(index=False, name=None))
+        # Gestione Multi-Index vs Single-Index
+        # Se scarichiamo 1 solo ticker, yfinance non usa il MultiIndex sulle colonne.
+        if isinstance(data.columns, pd.MultiIndex):
+            df_flat = data.stack(level=0, future_stack=True).reset_index()
+        else:
+            # Caso singolo ticker: aggiungiamo la colonna Ticker manualmente
+            df_flat = data.reset_index()
+            df_flat['Ticker'] = tickers[0] if tickers else "UNKNOWN"
+
+        # Rinominiamo la colonna Date/Datetime se necessario
+        if 'Date' in df_flat.columns:
+            df_flat['date_col'] = df_flat['Date']
+        elif 'Datetime' in df_flat.columns:
+            df_flat['date_col'] = df_flat['Datetime']
+        else:
+            self.logger.error("Colonna data non trovata nel DataFrame.")
+            return []
+
+        # Conversione e Pulizia Data
+        df_flat['date_col'] = pd.to_datetime(df_flat['date_col']).dt.date
+        
+        # --- SANITIZZAZIONE VOLUME (FIX BIGINT ERROR) ---
+        # 1. Sostituisce NaN con 0
+        df_flat['Volume'] = df_flat['Volume'].fillna(0)
+        
+        # 2. Rimuove infiniti (+inf, -inf)
+        import numpy as np # Assicurati di avere import numpy as np in alto
+        df_flat = df_flat.replace([np.inf, -np.inf], 0)
+
+        # 3. Clamping (Taglio valori eccessivi)
+        # Il max di Postgres BIGINT è ~9.22 * 10^18. 
+        # Impostiamo un limite sicuro (es. 10^15) che è comunque irraggiungibile per volumi reali.
+        MAX_BIGINT_SAFE = 10**15 
+        df_flat['Volume'] = df_flat['Volume'].clip(upper=MAX_BIGINT_SAFE)
+
+        # 4. Conversione finale a Intero
+        df_flat['Volume'] = df_flat['Volume'].astype(int)
+        # ------------------------------------------------
+
+        # Selezione colonne finali
+        # Assicuriamoci che l'ordine sia quello atteso dal DatabaseManager
+        # (ticker, date, open, high, low, close, volume)
+        try:
+            target_df = df_flat[['Ticker', 'date_col', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        except KeyError as e:
+            self.logger.error(f"Colonne mancanti nel DataFrame normalizzato: {e}")
+            return []
+
+        # Conversione in lista di tuple (più veloce per psycopg)
+        all_data = list(target_df.itertuples(index=False, name=None))
 
         return all_data
 
