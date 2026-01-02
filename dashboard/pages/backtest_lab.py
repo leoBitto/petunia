@@ -1,4 +1,3 @@
-# dashboard/pages/2_🧪_Backtest_Lab.py
 import streamlit as st
 import pandas as pd
 from pathlib import Path
@@ -50,7 +49,8 @@ with tab_run:
                 
                 # Immagine
                 if (p / "chart.png").exists():
-                    st.image(str(p / "chart.png"), width=True)
+                    # CORRETTO: use_container_width invece di width
+                    st.image(str(p / "chart.png"), use_container_width=True)
                 
                 # Metriche da JSON
                 if (p / "config.json").exists():
@@ -84,8 +84,11 @@ with tab_history:
         sel_run = None
         if sel_strat:
             with c_run:
-                runs = sorted([x.name for x in (base_dir / sel_strat).iterdir()], reverse=True)
-                sel_run = st.selectbox("Select Timestamp", runs)
+                # Controllo se la cartella esiste e non è vuota
+                strat_path = base_dir / sel_strat
+                if strat_path.exists():
+                     runs = sorted([x.name for x in strat_path.iterdir()], reverse=True)
+                     sel_run = st.selectbox("Select Timestamp", runs)
             
             if sel_run:
                 run_path = base_dir / sel_strat / sel_run
@@ -97,7 +100,8 @@ with tab_history:
                 
                 with col_img:
                     if (run_path / "chart.png").exists():
-                        st.image(str(run_path / "chart.png"), width=True)
+                        # CORRETTO: use_container_width
+                        st.image(str(run_path / "chart.png"), use_container_width=True)
                 
                 with col_data:
                     if (run_path / "config.json").exists():
@@ -106,4 +110,5 @@ with tab_history:
                         st.json(conf, expanded=False)
 
                     if (run_path / "trades.csv").exists():
-                        st.dataframe(pd.read_csv(run_path / "trades.csv"), width=True, height=300)
+                        # CORRETTO: use_container_width e height numerico
+                        st.dataframe(pd.read_csv(run_path / "trades.csv"), use_container_width=True, height=300)
