@@ -28,9 +28,10 @@ case "$1" in
         docker compose build
         ;;
 
-    start)
-        echo -e "${GREEN}Avvio Database...${NC}"
-        docker compose up -d db
+	start)
+        echo -e "${GREEN}Avvio Infrastruttura (DB + Dashboard)...${NC}"
+        # Aggiungiamo 'dashboard' alla lista dei servizi da avviare
+        docker compose up -d db dashboard
         ;;
 
 	init)
