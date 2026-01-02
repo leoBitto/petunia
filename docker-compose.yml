@@ -47,6 +47,28 @@ services:
       # Modifica: nome rete aggiornato
       - petunia_net 
 
+  dashboard:
+    build: .
+    container_name: petunia_dashboard
+    # Sovrascriviamo il comando di default: avvia Streamlit
+    command: streamlit run dashboard/Home.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
+    ports:
+      - "8501:8501"  # Espone la porta web
+    volumes:
+      - .:/app             # Hot-reload del codice
+      - ./data:/app/data   # Accesso ai dati (DB e Backtest)
+      - ./config:/app/config
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - petunia_net
+
 networks:
   # Modifica: definizione rete aggiornata
   petunia_net: 

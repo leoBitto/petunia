@@ -67,6 +67,11 @@ case "$1" in
         docker compose down
         ;;
 
+	dashboard)
+		echo "Log Dashboard (Streamlit)..."
+        docker compose logs -f dashboard
+        ;;
+
     *)
         echo "Usage: $0 {setup|start|stop|status|daily|weekly|backtest|shell}"
         exit 1
