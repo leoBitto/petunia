@@ -24,16 +24,17 @@ def test_db_ohlc_lifecycle(test_db):
     # Chiediamo solo TEST_A
     fetched = test_db.get_ohlc(["TEST_A"], "2024-01-01", "2024-01-05")
     
-    print(f"DEBUG FETCHED: {fetched}")
-    
     assert len(fetched) == 2
     assert fetched[0]['ticker'] == "TEST_A"
     assert float(fetched[0]['close']) == 105.0 # Postgres torna Decimal, convertiamo o confrontiamo bene
     
     # Chiediamo tutti gli storici
     all_data_map = test_db.get_ohlc_all_tickers(days=365)
-    assert "TEST_A" in all_data_map.keys
-    assert "TEST_B" in all_data_map.keys
+    
+    print(f"DEBUG FETCHED: {all_data_map}")
+    
+    assert "TEST_A" in all_data_map
+    assert "TEST_B" in all_data_map
     assert len(all_data_map["TEST_A"]) == 2
 
 def test_db_portfolio_persistence(test_db):
