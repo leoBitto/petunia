@@ -24,6 +24,8 @@ def test_db_ohlc_lifecycle(test_db):
     # Chiediamo solo TEST_A
     fetched = test_db.get_ohlc(["TEST_A"], "2024-01-01", "2024-01-05")
     
+    print(f"DEBUG FETCHED: {fetched}")
+    
     assert len(fetched) == 2
     assert fetched[0]['ticker'] == "TEST_A"
     assert float(fetched[0]['close']) == 105.0 # Postgres torna Decimal, convertiamo o confrontiamo bene
