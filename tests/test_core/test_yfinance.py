@@ -14,11 +14,11 @@ def test_fetch_ohlc_success(mock_download):
     data = {
         'Open': [100.0], 'High': [105.0], 'Low': [95.0], 'Close': [102.0], 'Volume': [1000]
     }
-    mock_df = pd.DataFrame(data, index=pd.to_datetime(["2024-01-01"]))
-    mock_df.index.name = "Date"
-    # Aggiungiamo Ticker come colonna o indice a seconda di come yfinance si comporta quel giorno
-    # Nel codice YFinanceManager gestiamo entrambi, qui simuliamo il reset_index
-    mock_df['Ticker'] = "AAPL" 
+    today = pd.Timestamp.now().normalize()
+    
+    mock_df = pd.DataFrame(data, index=[today])
+    mock_df.index.name = "Date" # Ricorda il fix di prima!
+    mock_df['Ticker'] = "AAPL"
     
     mock_download.return_value = mock_df
 

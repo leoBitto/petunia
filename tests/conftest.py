@@ -8,9 +8,11 @@ from src.database_manager import DatabaseManager
 def generate_market_data(trend_type, length=300, start_price=100, volatility=0.02):
     """
     Genera dati OHLCV coerenti matematicamente.
-    High/Low sono derivati dal Close + Volatilità.
+    Date: Termina OGGI e va indietro di 'length' giorni.
     """
-    dates = pd.date_range(start="2024-01-01", periods=length)
+    # MODIFICA: Generazione date dinamica (fino a oggi)
+    end_date = pd.Timestamp.now().normalize() # normalize mette l'ora a 00:00:00
+    dates = pd.date_range(end=end_date, periods=length)
     
     # Base trend
     x = np.linspace(0, 10, length)
