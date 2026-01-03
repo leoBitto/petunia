@@ -1,5 +1,5 @@
 import pytest
-from datetime import date
+from datetime import date, timedelta
 import pandas as pd
 
 def test_db_ohlc_lifecycle(test_db):
