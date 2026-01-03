@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 from src.risk_manager import RiskManager
 
-def test_risk_buy_logic(mock_uptrend_data):
+def test_risk_buy_logic(mock_uptrend):
     """Verifica calcolo Size e Stop Loss per un ordine BUY."""
     rm = RiskManager(risk_per_trade=0.02, stop_atr_multiplier=2.0)
     
@@ -36,7 +36,7 @@ def test_risk_buy_logic(mock_uptrend_data):
     assert order['stop_loss'] == 90.0  # 100 - 10
     assert order['take_profit'] == 120.0 # 100 + (10 * 2) Default 2R
 
-def test_risk_contract_compliance(mock_uptrend_data):
+def test_risk_contract_compliance(mock_uptrend):
     """Verifica che l'ordine rispetti il CONTRATTO (Schema Validation)."""
     rm = RiskManager()
     

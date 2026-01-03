@@ -18,6 +18,8 @@ def test_db_ohlc_lifecycle(test_db):
     # 2. Insert (Upsert)
     test_db.upsert_ohlc(raw_data)
     
+    fetched = test_db.get_ohlc(["TEST_A"], "2024-01-01", "2024-01-05")
+    
     # 3. Retrieve
     # Chiediamo solo TEST_A
     fetched = test_db.get_ohlc(["TEST_A"], "2024-01-01", "2024-01-05")
