@@ -1,6 +1,6 @@
 import pytest
 from src.strategies import StrategyRSI
-from .test_validate_contract import validate_strategy_output
+from .validate_contract import validate_strategy_output
 
 @pytest.fixture
 def strategy():
