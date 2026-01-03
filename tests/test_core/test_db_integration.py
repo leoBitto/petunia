@@ -32,8 +32,8 @@ def test_db_ohlc_lifecycle(test_db):
     
     # Chiediamo tutti gli storici
     all_data_map = test_db.get_ohlc_all_tickers(days=365)
-    assert "TEST_A" in all_data_map
-    assert "TEST_B" in all_data_map
+    assert "TEST_A" in all_data_map.keys
+    assert "TEST_B" in all_data_map.keys
     assert len(all_data_map["TEST_A"]) == 2
 
 def test_db_portfolio_persistence(test_db):
