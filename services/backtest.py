@@ -15,7 +15,7 @@ from src.risk_manager import RiskManager
 from src.logger import get_logger
 
 # Import Strategie
-from src.strategy_RSI import StrategyRSI
+from src.strategies import StrategyRSI, StrategyEMA
 
 logger = get_logger("Backtester")
 
@@ -77,6 +77,12 @@ def run_backtest(strategy_name: str = "RSI",
             rsi_period=strategy_params.get('rsi_period', 14),
             rsi_lower=strategy_params.get('rsi_lower', 30),
             rsi_upper=strategy_params.get('rsi_upper', 70),
+            atr_period=strategy_params.get('atr_period', 14)
+        )
+    elif strategy_name == "EMA":
+         strategy = StrategyEMA(
+            short_window=strategy_params.get('short_window', 50),
+            long_window=strategy_params.get('long_window', 200),
             atr_period=strategy_params.get('atr_period', 14)
         )
     else:

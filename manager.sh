@@ -54,6 +54,12 @@ case "$1" in
         docker compose run --rm app python -m services.backtest
         ;;
 
+	test)
+        echo -e "${GREEN}Running Tests (Pytest inside Docker)...${NC}"
+        # Esegue pytest sulla cartella tests/ con verbosità attiva (-v)
+        docker compose run --rm app pytest tests/ -v
+        ;;
+		
     shell)
         echo -e "${GREEN}Opening Shell...${NC}"
         docker compose run --rm -it app /bin/bash
@@ -73,8 +79,8 @@ case "$1" in
         docker compose logs -f dashboard
         ;;
 
-    *)
-        echo "Usage: $0 {setup|start|stop|status|daily|weekly|backtest|shell}"
+	*)
+        echo "Usage: $0 {setup|start|stop|status|daily|weekly|backtest|test|shell|dashboard}"
         exit 1
         ;;
 esac

@@ -11,3 +11,6 @@ __pycache__
 data/
 logs/
 config/credentials/
+.pytest_cache
+htmlcov
+.coverage

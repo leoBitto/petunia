@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict
-from src.strategy_base import StrategyBase
+from .base import StrategyBase
 
 class StrategyRSI(StrategyBase):
     """

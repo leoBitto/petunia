@@ -7,7 +7,7 @@ from src.yfinance_manager import YFinanceManager
 from src.drive_manager import DriveManager
 from src.risk_manager import RiskManager
 from src.logger import get_logger
-from src.strategy_RSI import StrategyRSI
+from src.strategies import StrategyRSI, StrategyEMA
 
 logger = get_logger("WeeklyRun")
 
