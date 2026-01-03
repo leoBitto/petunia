@@ -1,29 +1,71 @@
-name: CI - Code Quality
+name: CI - Code Quality & Testing
 
-# Gira su ogni push e ogni Pull Request
-on: [push, pull_request]
+# Gira su ogni push e ogni Pull Request sui branch principali
+on:
+  push:
+    branches: [ "main", "feat/*" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  lint:
+  build-and-test:
     runs-on: ubuntu-latest
+
+    # 🐳 SERVICE: Avviamo un Postgres "volante" per i test di integrazione
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        # Mappiamo la porta 5432 del container alla 5432 del runner
+        ports:
+          - 5432:5432
+        # Healthcheck: aspettiamo che il DB sia pronto prima di iniziare i test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8
+          pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Lint with Flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          # exit-zero treats all errors as warnings
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      # 🧪 STEP: Testing
+      - name: Run Tests with Pytest
+        # Definiamo le variabili d'ambiente che il Config loader leggerà
+        env:
+          DB_HOST: localhost      # Sulla CI, il service container è su localhost
+          DB_PORT: 5432
+          DB_USER: test_user      # Deve combaciare con la definizione 'services' sopra
+          DB_PASSWORD: test_password
+          DB_NAME: test_db
+          # Dummy path per evitare crash se il config cerca il file (anche se mockato)
+          GOOGLE_KEY_PATH: "config/credentials/service_account.json"
+        run: |
+          # Creiamo un file dummy per le credenziali Google (i test lo mockano, ma il config potrebbe cercarlo)
+          mkdir -p config/credentials
+          echo "{}" > config/credentials/service_account.json
+          
+          # Esecuzione Test
+          pytest tests/ -v
