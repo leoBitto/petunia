@@ -43,6 +43,7 @@ services:
       # Secret Injection (Mounting the credentials folder)
       - ./config/credentials:/app/config/credentials
       - ./logs:/app/logs
+      - ./config:/app/config
     networks:
       - petunia_net 
 
