@@ -75,25 +75,37 @@ Detailed documentation is available in the **[GitHub Wiki](https://github.com/le
 
 ## 🧭 Roadmap
 
-### v1.x - Expansion & Testing (Current Focus)
+### v1.x - Expansion & Testing (Completed)
 
 | Status | Module | Description |
-| --- | --- | --- |
+| :---: | :--- | :--- |
 | ✅ | **Core v1.0** | Stable Docker Architecture, Risk Manager |
 | ✅ | **Testing** | Full PyTest Suite: Unit, Mocking, and DB Integration |
 | ✅ | **Strategies** | Implemented Trend Following (EMA) & Mean Reversion (RSI) Logic |
 | ✅ | **Dynamic Config** | Allow Strategy selection via Frontend (DB-backed Settings) |
 | ✅ | **Backtest Lab** | Unified Benchmark Engine & Interactive Plotly Charts |
-| ⏳ | **Universe** | Scaling tracked universe to 100+ tickers (In Progress) |
 
-### v2.0 - Cloud Native & DevOps
+### v2.0 - Cloud Native & DevOps (Next Up)
 
 | Status | Module | Description |
-| --- | --- | --- |
+| :---: | :--- | :--- |
 | 🔮 | **IaC** | Terraform for GCP Infrastructure provisioning |
 | 🔮 | **Cloud Deploy** | Production deployment on GCP Compute Engine |
 | 🔮 | **Secret Mgr** | Migration to Google Secret Manager (No more .env) |
+| 🔮 | **Automation** | Systemd services & Auto-healing pipelines |
 
+### v3.0 - Quantitative Scaling & Optimization
+
+* **Grid Search Optimization:** Automated finding of best parameters (e.g., Best RSI period for Apple vs Tesla).
+* **Universe Expansion:** Scaling data engine to handle 500+ tickers (S&P 500).
+* **New Strategies:** Bollinger Bands, MACD, and Volume-based strategies.
+* **Deep Analytics:** Sharpe Ratio, Max Drawdown, and Calmar Ratio metrics in Dashboard.
+
+### v4.0 - AI Agent & Alternative Data
+
+* **Sentiment Analysis:** LLM-based analysis of financial news and social sentiment.
+* **AI Oracle:** An autonomous agent that selects the best strategy based on current market regime (Bull/Bear/Crab).
+* **Headless Mode:** Full autonomy with reduced UI dependency.
 ---
 
 ## 📄 License
