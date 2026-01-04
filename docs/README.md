@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/petunia_logo.png" width="600" alt="Petunia Logo">
+  <img src="images/petunia_logo.png" width="200" alt="Petunia Logo">
   <h1>Petunia Trading System</h1>
   <p><em>"Petunia" is a playful derivative of the Latin word <b>Pecunia</b> (money/wealth),<br>symbolizing organic growth in a digital financial environment.</em></p>
 </div>
@@ -15,8 +15,8 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ![Docker](https://img.shields.io/badge/docker-compose-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Last Update:** January 2026  
-**Version:** 1.2.0  
+**Last Update:** January 2026
+**Version:** 1.3.0 (Dynamic Config & Backtest Lab)
 **Wiki:** [Complete Documentation](https://github.com/leoBitto/petunia/wiki)
 
 ---
@@ -28,9 +28,9 @@ Automated trading data pipeline & decision support system. Fetches market data, 
 ### Key Features
 * 🐳 **Containerized Architecture:** Isolated Docker environments for App and Database (PostgreSQL).
 * 📈 **Strategy Factory:** Plug-and-play strategy engine (Currently supporting **EMA Crossover** & **RSI Mean Reversion**).
+* 🧪 **Backtest Lab:** Advanced simulation engine with Benchmark capabilities and Plotly visualizations.
 * 🛡️ **Risk First:** Built-in Risk Manager enforcing the 2% Rule and ATR-based volatility stops.
-* 🧪 **Robust Testing:** Full Pytest suite with mock services and integration tests.
-* 📊 **Interactive Dashboard:** Streamlit UI for portfolio monitoring and system control.
+* 📊 **Interactive Dashboard:** Streamlit UI for portfolio monitoring, strategy configuration, and system control.
 
 ---
 
@@ -64,7 +64,7 @@ Once running, access the Dashboard at **`http://localhost:8501`** to initialize 
 
 ## 📚 Documentation
 
-Detailed documentation is available in the **[GitHub Wiki](https://www.google.com/url?sa=E&source=gmail&q=https://github.com/leoBitto/petunia/wiki)**.
+Detailed documentation is available in the **[GitHub Wiki](https://github.com/leoBitto/petunia/wiki)**.
 
 * **[Strategy Playbook](https://www.google.com/search?q=https://github.com/leoBitto/petunia/wiki/Strategy-Playbook):** Deep dive into EMA and RSI logic.
 * **[Risk Management](https://www.google.com/search?q=https://github.com/leoBitto/petunia/wiki/Risk-Management-Bible):** How position sizing works.
@@ -82,7 +82,8 @@ Detailed documentation is available in the **[GitHub Wiki](https://www.google.co
 | ✅ | **Core v1.0** | Stable Docker Architecture, Risk Manager |
 | ✅ | **Testing** | Full PyTest Suite: Unit, Mocking, and DB Integration |
 | ✅ | **Strategies** | Implemented Trend Following (EMA) & Mean Reversion (RSI) Logic |
-| 🔄 | **Dynamic Config** | Allow Strategy selection via Frontend (DB-backed Settings) |
+| ✅ | **Dynamic Config** | Allow Strategy selection via Frontend (DB-backed Settings) |
+| ✅ | **Backtest Lab** | Unified Benchmark Engine & Interactive Plotly Charts |
 | ⏳ | **Universe** | Scaling tracked universe to 100+ tickers (In Progress) |
 
 ### v2.0 - Cloud Native & DevOps
@@ -99,3 +100,4 @@ Detailed documentation is available in the **[GitHub Wiki](https://www.google.co
 
 Released under the **MIT License**.
 © 2026 Leonardo Bitto
+
