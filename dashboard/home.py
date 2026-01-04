@@ -2,10 +2,29 @@
 import streamlit as st
 import pandas as pd
 from dashboard.utils import load_portfolio_data, load_ohlc_summary
+from src.settings_manager import SettingsManager
 
 st.set_page_config(page_title="Petunia Dashboard", page_icon="🌸", layout="wide")
 
 st.title("🌸 Petunia | System Overview")
+
+# --- 1. ACTIVE STRATEGY BADGE ---
+try:
+    settings = SettingsManager()
+    active_strat = settings.get_active_strategy_name()
+    
+    # Usiamo un container colorato per evidenziare la strategia
+    with st.container():
+        c_badge, c_link = st.columns([3, 1])
+        with c_badge:
+            st.info(f"🧠 **Active Intelligence:** The system is currently running on **{active_strat}** strategy.")
+        with c_link:
+            # Purtroppo Streamlit non ha link interni facili, usiamo un testo guida
+            st.caption("Change Strategy in:")
+            st.page_link("pages/control_panel.py", label="🕹️ Control Panel", icon="🔧")
+except Exception as e:
+    st.error(f"⚠️ Error loading configuration: {e}")
+
 st.markdown("---")
 
 # 1. KPI Portafoglio
