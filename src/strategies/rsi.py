@@ -60,10 +60,14 @@ class StrategyRSI(StrategyBase):
             d.dropna(subset=['rsi', 'atr'], inplace=True)
 
             # 4. Formattazione
-            # Selezioniamo solo le colonne utili e aggiungiamo meta
-            # Nota: 'meta' vettoriale è complesso, per ora lo semplifichiamo o lo mettiamo vuoto
-            # Per debug veloce, mettiamo RSI come colonna esplicita o stringa nel meta se serve
-            # Qui per performance teniamo meta semplice
+            # CORREZIONE: Aggiungiamo 'rsi' alla lista delle colonne da mantenere!
+            output = d[['date', 'ticker', 'close', 'signal', 'atr', 'rsi']].copy()
+            
+            output.rename(columns={'close': 'price'}, inplace=True)
+            
+            output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
+
+            signals_list.append(output)
             
             output = d[['date', 'ticker', 'close', 'signal', 'atr']].copy()
             # Rinominiamo close in price per coerenza col resto del sistema

@@ -47,14 +47,17 @@ class StrategyEMA(StrategyBase):
             d.dropna(subset=['ema_short', 'ema_long', 'atr'], inplace=True)
 
             # 4. Output
-            output = d[['date', 'ticker', 'close', 'signal', 'atr']].copy()
+            output = d[['date', 'ticker', 'close', 'signal', 'atr', 'ema_short', 'ema_long']].copy()
+            
             output.rename(columns={'close': 'price'}, inplace=True)
             
-            # Meta dati per capire quanto sono distanti le medie
+            # Ora le colonne esistono e possiamo leggerle per il meta
             output['meta'] = output.apply(lambda x: {
                 'ema_s': round(x['ema_short'], 2), 
                 'ema_l': round(x['ema_long'], 2)
             }, axis=1)
+
+            signals_list.append(output)
 
             signals_list.append(output)
 
