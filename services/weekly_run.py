@@ -17,11 +17,16 @@ def main():
     settings = SettingsManager()
     pm = PortfolioManager()
     
-    # Carichiamo config rischio e strategia
+    # Carichiamo config rischio, strategia e commissioni
     try:
         active_strat_name = settings.get_active_strategy_name()
         strat_params = settings.get_strategy_params(active_strat_name)
         risk_params = settings.get_risk_params()
+        
+        # --- NOVITÀ: Caricamento Commissioni ---
+        fees_conf = settings.get_fees_config()
+        fee_fixed = fees_conf.get("fixed_euro", 0.0)
+        fee_pct = fees_conf.get("percentage", 0.0)
         
         # Risk Manager inizializzato coi parametri JSON
         rm = RiskManager(
@@ -30,13 +35,13 @@ def main():
         )
         
         logger.info(f"⚙️ Config: {active_strat_name} | Risk: {risk_params['risk_per_trade']*100}%")
+        logger.info(f"💰 Struttura Costi: €{fee_fixed} fisso + {fee_pct*100}% variabile")
         
     except Exception as e:
         logger.critical(f"❌ Errore Configurazione: {e}")
         return
 
     # 2. Fetch Dati (Serve storico sufficiente per gli indicatori!)
-    # Scarichiamo es. 365 giorni per essere sicuri che EMA200 funzioni
     logger.info("📥 Caricamento dati storici dal DB...")
     data_map = db.get_ohlc_all_tickers(days=365)
     
@@ -44,7 +49,7 @@ def main():
         logger.warning("⚠️ Nessun dato sufficiente per l'analisi.")
         return
 
-    # 3. Calcolo Segnali (VETTORIALE - Restituisce tutto lo storico)
+    # 3. Calcolo Segnali (VETTORIALE)
     strategy = get_strategy(active_strat_name, **strat_params)
     all_signals = strategy.compute(data_map)
     
@@ -55,13 +60,9 @@ def main():
     # ------------------------------------------------------------------
     # 4. FILTRO "SOLO OGGI" 
     # ------------------------------------------------------------------
-    # Troviamo la data più recente presente nei segnali
-    # (Attenzione: Potrebbe essere Venerdì scorso se è Lunedì mattina e non abbiamo scaricato)
     latest_date = all_signals['date'].max()
-    
     logger.info(f"📆 Filtraggio segnali per l'ultima data disponibile: {latest_date}")
     
-    # Prendiamo solo i segnali dell'ultimo giorno disponibile
     latest_signals = all_signals[all_signals['date'] == latest_date].copy()
     
     if latest_signals.empty:
@@ -74,11 +75,9 @@ def main():
     logger.info(f"🔎 Analisi Oggi: {len(buy_signals)} BUY, {len(sell_signals)} SELL su {len(latest_signals)} ticker.")
 
     # 5. Esecuzione (Mark-to-Market & Risk Management)
-    # Aggiorniamo i prezzi del portafoglio all'ultimo prezzo noto
     current_prices = dict(zip(latest_signals['ticker'], latest_signals['price']))
     pm.update_market_prices(current_prices)
 
-    # Risk Manager valuta SOLO i segnali filtrati
     orders = rm.evaluate(
         latest_signals, 
         pm.get_total_equity(), 
@@ -86,13 +85,31 @@ def main():
         dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
     )
     
-    # 6. Invio Ordini
+    # 6. Invio Ordini & Applicazione Commissioni
     if not orders:
         logger.info("✅ Nessun ordine da eseguire oggi.")
     else:
         for order in orders:
             logger.info(f"🔔 ESECUZIONE: {order['action']} {order['quantity']} {order['ticker']}")
+            
+            # A. Eseguiamo l'ordine (aggiorna size portfolio e scala costo azioni dal cash)
             pm.execute_order(order)
+            
+            # B. Calcoliamo e sottraiamo le commissioni EXTRA
+            trade_val = order['price'] * order['quantity']
+            commission = fee_fixed + (trade_val * fee_pct)
+            
+            # Leggiamo il cash aggiornato post-trade
+            current_cash = float(pm.df_cash.iloc[0]['cash'])
+            new_cash = current_cash - commission
+            
+            # Aggiorniamo la cassa
+            pm.update_cash(new_cash)
+            
+            logger.info(f"💸 Fee applicata: €{commission:.2f} (Cash residuo: €{new_cash:.2f})")
+            
+        # Salviamo lo stato del portafoglio aggiornato su DB
+        db.save_portfolio(pm.get_snapshot())
             
     logger.info("🏁 Weekly Run Completata.")
 

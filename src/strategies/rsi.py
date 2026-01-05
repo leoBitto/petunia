@@ -65,18 +65,14 @@ class StrategyRSI(StrategyBase):
             d.dropna(subset=['rsi', 'atr'], inplace=True)
 
             # 4. Formattazione Output
-            # Selezioniamo ESPLICITAMENTE le colonne in minuscolo create sopra
             try:
-                # Nota: qui includiamo 'rsi' nella lista
                 output = d[['date', 'ticker', 'close', 'signal', 'atr', 'rsi']].copy()
                 output.rename(columns={'close': 'price'}, inplace=True)
                 
-                # Ora 'rsi' esiste sicuramente
                 output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
 
                 signals_list.append(output)
             except KeyError as e:
-                # Se esplode qui, stampiamo le colonne disponibili per capire perché
                 self.logger.error(f"CRASH su {ticker}! Colonne disponibili: {d.columns.tolist()}")
                 self.logger.error(f"Errore specifico: {e}")
                 raise e

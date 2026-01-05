@@ -45,6 +45,11 @@ class SettingsManager:
             self.logger.error(f"Errore salvataggio config: {e}")
             raise
 
+    def get_fees_config(self) -> Dict[str, float]:
+        """Ritorna la configurazione commissioni (default: 0)."""
+        cfg = self.load_config()
+        return cfg.get("fees_config", {"fixed_euro": 0.0, "percentage": 0.0})
+        
     def get_active_strategy_name(self) -> str:
         """Ritorna il nome della strategia attiva. Errore se manca."""
         cfg = self.load_config()

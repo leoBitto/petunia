@@ -4,6 +4,10 @@
         "risk_per_trade": 0.02,
         "stop_atr_multiplier": 2.0
     },
+	"fees_config": {
+        "fixed_euro": 2.0,
+        "percentage": 0
+    },
     "strategies_params": {
         "EMA": {
             "short_window": 50,

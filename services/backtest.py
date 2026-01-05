@@ -16,7 +16,6 @@ from src.settings_manager import SettingsManager
 from src.logger import get_logger
 from src.strategies import get_strategy, STRATEGY_MAP
 
-# Usiamo il logger configurato
 logger = get_logger("Backtester")
 
 # --- HELPER FUNCTIONS ---
@@ -31,6 +30,13 @@ def get_session_dir(base_path: Path) -> Path:
         counter += 1
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
+
+def calculate_max_drawdown(equity_series: pd.Series) -> float:
+    """Calcola il Max Drawdown in percentuale."""
+    if equity_series.empty: return 0.0
+    rolling_max = equity_series.cummax()
+    drawdown = (equity_series - rolling_max) / rolling_max
+    return drawdown.min() * 100
 
 def save_results(output_dir: Path, strategy_name: str, equity_df: pd.DataFrame, trades_df: pd.DataFrame, config: dict):
     """Salva i risultati su disco."""
@@ -64,136 +70,69 @@ def _execute_single_strategy(strategy_name: str,
                              initial_capital: float,
                              days_history: int):
     
-    logger.info(f"--- 🕵️ DEBUG START: {strategy_name} ---")
+    logger.info(f"--- 🚀 RUN: {strategy_name} (Fee-Adjusted) ---")
     
-    # 1. CHECK DATI INPUT
-    if not data_map:
-        logger.error("❌ ERRORE: data_map è vuoto!")
-        return
-
-    first_ticker = list(data_map.keys())[0]
-    df_example = data_map[first_ticker]
-    logger.info(f"📊 Dati caricati per {len(data_map)} ticker.")
-    logger.info(f"📅 Esempio ({first_ticker}): {len(df_example)} righe.")
-    logger.info(f"   Min Date: {df_example['date'].min()} | Max Date: {df_example['date'].max()}")
-
-    # 2. CALCOLO STRATEGIA
-    # =========================================================================
-    # 🕵️ DEBUG DATA INTEGRITY PROBE
-    # =========================================================================
-    
-    # 1. CONTROLLO INPUT (Cosa stiamo passando alla strategia?)
-    # Prendiamo il primo ticker disponibile per vedere che date ha
-    test_ticker = list(data_map.keys())[0]
-    df_input = data_map[test_ticker]
-    
-    # Estraiamo le date univoche e le ordiniamo
-    input_dates = sorted(pd.to_datetime(df_input['date']).unique())
-    
-    logger.info(f"🔍 PROVA INPUT (Dati dal DB per {test_ticker}):")
-    logger.info(f"   ➡️ Righe Totali: {len(df_input)}")
-    logger.info(f"   ➡️ Date Distinte: {len(input_dates)}")
-    if len(input_dates) > 0:
-        logger.info(f"   ➡️ Range Temporale: {input_dates[0]} -> {input_dates[-1]}")
-        logger.info(f"   ➡️ Prime 3 Date: {[str(d.date()) for d in input_dates[:3]]}")
-        logger.info(f"   ➡️ Ultime 3 Date: {[str(d.date()) for d in input_dates[-3:]]}")
-    else:
-        logger.error("   ❌ ERRORE: Nessuna data trovata nell'input!")
-
-    # 2. ESECUZIONE STRATEGIA
+    # 1. Caricamento Commissioni
     try:
-        logger.info(f"strategy name: {strategy_name}")
-        strategy = get_strategy(strategy_name, **strategy_params)
-        all_signals = strategy.compute(data_map)
-    except Exception as e:
-        logger.error(f"❌ ERRORE Strategy Compute: {e}")
-        return
+        settings = SettingsManager()
+        fees_conf = settings.get_fees_config()
+        fee_fixed = fees_conf.get("fixed_euro", 0.0)
+        fee_pct = fees_conf.get("percentage", 0.0)
+        logger.info(f"💰 Cost Structure: €{fee_fixed} + {fee_pct*100}% per trade.")
+    except:
+        fee_fixed, fee_pct = 0.0, 0.0
 
-    # 3. CONTROLLO OUTPUT (Cosa ci ha restituito la strategia?)
-    if all_signals.empty:
-        logger.warning("⚠️ Nessun segnale generato.")
-    else:
-        # Convertiamo date output
-        output_dates = sorted(pd.to_datetime(all_signals['date']).unique())
-        
-        logger.info(f"🔍 PROVA OUTPUT (Risultato Strategia):")
-        logger.info(f"   ⬅️ Righe Totali: {len(all_signals)}")
-        logger.info(f"   ⬅️ Date Distinte: {len(output_dates)}")
-        if len(output_dates) > 0:
-            logger.info(f"   ⬅️ Range Temporale: {output_dates[0]} -> {output_dates[-1]}")
-            logger.info(f"   ⬅️ Prime 3 Date: {[str(d.date()) for d in output_dates[:3]]}")
-        else:
-             logger.error("   ❌ ERRORE: Output dataframe ha date vuote o nulle!")
-
-    # =========================================================================
-
-    if all_signals.empty:
-        logger.warning("⚠️ Nessun segnale generato (all_signals empty).")
-        # Salviamo report vuoto
-        save_results(output_dir, strategy_name, pd.DataFrame(), pd.DataFrame(), {"error": "No signals"})
-        return
-
-    # 3. DEBUG DATE SEGNALI
-    all_signals['date'] = pd.to_datetime(all_signals['date'])
-    logger.info(f"🚦 Segnali Generati: {len(all_signals)} righe.")
-    logger.info(f"   Segnali Min Date: {all_signals['date'].min()}")
-    logger.info(f"   Segnali Max Date: {all_signals['date'].max()}")
-    
-    counts = all_signals['signal'].value_counts()
-    logger.info(f"   Distribuzione: {counts.to_dict()}")
-
-    # 4. DEBUG LOOP TEMPORALE
-    all_dates = sorted(list(set(d for df in data_map.values() for d in df['date'])))
-    all_dates_dt = [pd.to_datetime(d) for d in all_dates]
-    
-    start_date = datetime.now() - timedelta(days=days_history)
-    logger.info(f"⏳ Filtro Temporale: Cerco date successive a {start_date.date()}")
-    
-    sim_dates = [d for d in all_dates_dt if d >= pd.Timestamp(start_date)]
-    
-    logger.info(f"🗓️ Giorni nel Loop di Simulazione: {len(sim_dates)}")
-    if len(sim_dates) > 0:
-        logger.info(f"   Prima data sim: {sim_dates[0]} | Ultima: {sim_dates[-1]}")
-    else:
-        logger.error("❌ ERRORE CRITICO: sim_dates è vuoto! Il backtest non girerà.")
-
-    # 5. RISK MANAGER SETUP
+    # 2. Setup Managers
     try:
-        # Nota: Qui assumiamo che risk_params sia stato passato correttamente dalla funzione chiamante
         pm = PortfolioManager()
         pm.update_cash(initial_capital)
-        
         rm = RiskManager(
             risk_per_trade=risk_params.get("risk_per_trade", 0.02),
             stop_atr_multiplier=risk_params.get("stop_atr_multiplier", 2.0)
         )
+        strategy = get_strategy(strategy_name, **strategy_params)
     except Exception as e:
-        logger.error(f"❌ ERRORE Setup Manager: {e}")
+        logger.error(f"❌ Setup Error: {e}")
         return
 
-    equity_curve = []
+    # 3. Calcolo Segnali
+    try:
+        all_signals = strategy.compute(data_map)
+    except Exception as e:
+        logger.error(f"❌ Strategy Compute Error: {e}")
+        return
+
+    if all_signals.empty:
+        logger.warning("⚠️ Nessun segnale generato.")
+        save_results(output_dir, strategy_name, pd.DataFrame(), pd.DataFrame(), {"error": "No signals"})
+        return
+
+    all_signals['date'] = pd.to_datetime(all_signals['date'])
+    all_signals.sort_values('date', inplace=True)
+
+    # 4. Setup Loop Temporale
+    all_dates = sorted(list(set(d for df in data_map.values() for d in df['date'])))
+    start_date = datetime.now() - timedelta(days=days_history)
+    sim_dates = [d for d in all_dates if pd.to_datetime(d) >= pd.Timestamp(start_date)]
     
-    # 6. LOOP ESECUZIONE
+    equity_curve = []
     trades_count = 0
+    total_fees_paid = 0.0
+    
+    # 5. Loop Esecuzione
     for current_date in sim_dates:
+        current_date = pd.Timestamp(current_date)
+
         # Mark-to-Market
         current_prices = {}
         for ticker, df in data_map.items():
             row = df[pd.to_datetime(df['date']) == current_date]
             if not row.empty:
                 current_prices[ticker] = float(row.iloc[0]['close'])
-        
         pm.update_market_prices(current_prices)
         
-        # Filtro segnali
+        # Segnali & Risk
         daily_signals = all_signals[all_signals['date'] == current_date]
-        
-        # LOG DEBUG GIORNALIERO (Opzionale: scommentare se servono dettagli maniacali)
-        # if not daily_signals.empty:
-        #     relevant = daily_signals[daily_signals['signal'].isin(['BUY', 'SELL'])]
-        #     if not relevant.empty:
-        #         logger.debug(f"   🧐 {current_date.date()}: {len(relevant)} segnali potenziali.")
-
         orders = rm.evaluate(
             daily_signals, 
             pm.get_total_equity(), 
@@ -203,28 +142,44 @@ def _execute_single_strategy(strategy_name: str,
         
         for order in orders:
             pm.execute_order(order)
-            if order['action'] == 'BUY':
-                trades_count += 1
+            
+            # Applicazione Fee
+            trade_val = order['price'] * order['quantity']
+            commission = fee_fixed + (trade_val * fee_pct)
+            
+            # Sottrazione Cash
+            curr_cash = float(pm.df_cash.iloc[0]['cash'])
+            pm.update_cash(curr_cash - commission)
+            
+            total_fees_paid += commission
+            if order['action'] == 'BUY': trades_count += 1
 
         equity_curve.append({
             "date": current_date,
             "equity": pm.get_total_equity()
         })
 
-    logger.info(f"🏁 Backtest Finito. Trades eseguiti: {trades_count}")
-    logger.info("--- DEBUG END ---")
+    logger.info(f"🏁 Finito. Trades: {trades_count} | Fees Totali: €{total_fees_paid:.2f}")
 
-    # Save Results
+    # 6. Reporting
     df_equity = pd.DataFrame(equity_curve)
     final_equity = df_equity.iloc[-1]['equity'] if not df_equity.empty else initial_capital
+    max_dd = calculate_max_drawdown(df_equity['equity']) if not df_equity.empty else 0.0
+    roi = ((final_equity - initial_capital) / initial_capital) * 100
     
     config_dump = {
         "strategy": strategy_name,
         "params": strategy_params,
         "risk_params": risk_params,
+        "fees_config": fees_conf,
         "initial_capital": initial_capital,
         "final_equity": final_equity,
-        "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL'])
+        "metrics": {
+            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL']), # Trade Chiusi
+            "total_fees": round(total_fees_paid, 2),
+            "max_drawdown_pct": round(max_dd, 2),
+            "roi_pct": round(roi, 2)
+        }
     }
     save_results(output_dir, strategy_name, df_equity, pm.df_trades, config_dump)
 
@@ -235,84 +190,50 @@ def run_backtest_session(mode: str = "DEFAULT",
                          override_params: dict = None,
                          initial_capital: float = 10000.0,
                          years: int = 2) -> str:
-    """
-    Funzione principale (Orchestrator).
-    """
     settings = SettingsManager()
     db = DatabaseManager()
     
-    # 1. Caricamento Parametri Rischio (GLOBAL)
     try:
         risk_params = settings.get_risk_params()
-        logger.info(f"⚖️ Risk Config Loaded: {risk_params}")
     except Exception as e:
-        logger.critical(f"Impossibile avviare backtest: {e}")
+        logger.critical(f"Config Error: {e}")
         return ""
 
-    # 2. Preparazione Strategie da Eseguire
     strategies_to_run = [] 
-    
     if mode == "ALL":
-        logger.info("📢 Modalità BATCH: Esecuzione di TUTTE le strategie.")
         all_configs = settings.load_config().get("strategies_params", {})
         for name, params in all_configs.items():
             if name in STRATEGY_MAP:
                 strategies_to_run.append((name, params))
-                
     elif mode == "SINGLE_OVERRIDE":
-        if not override_strat_name or override_params is None:
-            raise ValueError("Per SINGLE_OVERRIDE servono nome e params.")
-        logger.info(f"🎯 Modalità CUSTOM UI: {override_strat_name} con params custom.")
         strategies_to_run.append((override_strat_name, override_params))
-        
     else:
         target = override_strat_name if override_strat_name else settings.get_active_strategy_name()
-        logger.info(f"⚙️ Modalità STANDARD: {target} da Config JSON.")
         params = settings.get_strategy_params(target)
         strategies_to_run.append((target, params))
 
-    if not strategies_to_run:
-        logger.error("Nessuna strategia da eseguire.")
-        return ""
-
-    # 3. Data Fetching Centralizzato
     days = years * 365
     logger.info(f"📥 Fetching Data ({days} days)...")
     data_map = db.get_ohlc_all_tickers(days=days + 200)
     
     if not data_map:
-        logger.error("Nessun dato nel DB per il backtest.")
+        logger.error("No Data.")
         return ""
 
-    # 4. Creazione Sessione
     base_dir = Path("data/backtests")
     session_dir = get_session_dir(base_dir)
     
-    # 5. Loop Esecuzione
     for name, params in strategies_to_run:
-        _execute_single_strategy(
-            strategy_name=name, 
-            strategy_params=params, 
-            risk_params=risk_params,
-            data_map=data_map, 
-            output_dir=session_dir, 
-            initial_capital=initial_capital, 
-            days_history=days 
-        )
+        _execute_single_strategy(name, params, risk_params, data_map, session_dir, initial_capital, days)
         
-    logger.info(f"✅ Sessione completata in: {session_dir}")
     return str(session_dir)
 
 # --- CLI ENTRY POINT ---
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else None
-    
-    if arg == "ALL":
-        run_backtest_session(mode="ALL")
-    elif arg and arg in STRATEGY_MAP:
-        run_backtest_session(mode="DEFAULT", override_strat_name=arg)
-    else:
-        run_backtest_session(mode="DEFAULT")
+    if arg == "ALL": run_backtest_session(mode="ALL")
+    elif arg and arg in STRATEGY_MAP: run_backtest_session(mode="DEFAULT", override_strat_name=arg)
+    else: run_backtest_session(mode="DEFAULT")
 
 if __name__ == "__main__":
     main()
