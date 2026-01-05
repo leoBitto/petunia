@@ -10,9 +10,13 @@ class RiskManager:
     Riceve lo stato del portafoglio come argomenti semplici.
     """
 
-    def __init__(self, risk_per_trade: float = 0.02, stop_atr_multiplier: float = 2.0):
-        self.logger = get_logger(self.__class__.__name__)
-        self.risk_per_trade = risk_per_trade
+    def __init__(self, risk_per_trade: float, stop_atr_multiplier: float):
+        """
+        Gestisce il dimensionamento delle posizioni e il rischio.
+        NON ha valori di default: devono essere passati dal SettingsManager.
+        """
+        self.logger = get_logger("RiskManager")
+        self.risk_per_trade = risk_per_trade         # Es. 0.02 (2%)
         self.stop_atr_multiplier = stop_atr_multiplier
 
     def evaluate(self, 
@@ -22,21 +26,15 @@ class RiskManager:
                  current_positions: Dict[str, int]) -> List[Dict[str, Any]]:
         """
         Valuta i segnali rispetto ai dati finanziari forniti.
-        
-        Input:
-            - signals_df: DataFrame dalla Strategia
-            - total_equity: Valore totale del portafoglio (Cash + Asset)
-            - available_cash: Liquidità corrente
-            - current_positions: Dict { 'TICKER': size } per sapere cosa possediamo già
         """
         orders = []
         if signals_df.empty:
             return orders
 
         # Usiamo variabili locali per simulare l'evoluzione della cassa nel loop
-        # NOTA: Non modifichiamo nulla fuori da questa funzione.
         simulated_cash = available_cash
         
+        # LOG INIZIALE: Fondamentale per sapere con quanti soldi stiamo partendo
         self.logger.info(f"Risk Eval Start. Equity: {total_equity:.2f}, Cash: {available_cash:.2f}")
 
         # -----------------------------------------------------------
@@ -50,7 +48,11 @@ class RiskManager:
 
             if ticker in current_positions:
                 size_to_sell = current_positions[ticker]
-                if size_to_sell <= 0: continue
+                if size_to_sell <= 0: 
+                    continue
+
+                # LOG VENDITA
+                self.logger.info(f"📉 SELLING {ticker}: Qty {size_to_sell} @ {price:.2f}")
 
                 orders.append({
                     "ticker": ticker,
@@ -61,11 +63,11 @@ class RiskManager:
                     "reason": row.get('meta')
                 })
 
-                # Aggiorniamo la cassa simulata per permettere nuovi acquisti
+                # Aggiorniamo la cassa simulata
                 proceeds = size_to_sell * price
                 simulated_cash += proceeds
                 
-                # Rimuoviamo virtualmente per i controlli successivi
+                # Rimuoviamo virtualmente
                 del current_positions[ticker]
 
         # -----------------------------------------------------------
@@ -78,12 +80,16 @@ class RiskManager:
             price = row['price']
             atr = row.get('atr', 0.0)
 
-            # 1. Non comprare se ho già la posizione (o se non l'ho venduta sopra)
+            # 1. Non comprare se ho già la posizione
             if ticker in current_positions:
+                # LOG DEBUG: Skippo perché lo ho già
+                self.logger.debug(f"⏭️ SKIP BUY {ticker}: Posizione già in portafoglio.")
                 continue
             
             # 2. Validazione ATR
             if atr <= 0 or pd.isna(atr):
+                # LOG WARNING: Problema dati
+                self.logger.warning(f"⚠️ SKIP BUY {ticker}: ATR non valido ({atr}).")
                 continue
 
             # --- POSITION SIZING ---
@@ -91,22 +97,40 @@ class RiskManager:
             stop_distance = atr * self.stop_atr_multiplier
             stop_loss_price = price - stop_distance
 
-            if stop_loss_price <= 0: continue
+            if stop_loss_price <= 0:
+                self.logger.warning(f"⚠️ SKIP BUY {ticker}: Stop Price negativo ({stop_loss_price:.2f}).")
+                continue
 
             # Size = Rischio Euro / Rischio per Azione
             shares_calc = risk_budget / stop_distance
             shares = int(np.floor(shares_calc))
+
+            # LOG CRUCIALE: Qui vediamo i calcoli matematici
+            # Se shares è 0, vedremo esattamente perché (es. Stop distance troppo grande rispetto al budget)
+            self.logger.debug(
+                f"🔍 CALC {ticker} | Price: {price:.2f} | ATR: {atr:.2f} | "
+                f"RiskBudget: {risk_budget:.2f} | StopDist: {stop_distance:.2f} | "
+                f"RawShares: {shares_calc:.4f} -> {shares}"
+            )
 
             # --- CASH CHECK ---
             cost = shares * price
             
             # Se il costo supera la cassa (inclusa quella liberata dalle vendite)
             if cost > simulated_cash:
-                shares = int(np.floor(simulated_cash / price))
+                max_shares_cash = int(np.floor(simulated_cash / price))
+                # LOG CASH: Se ridimensioniamo per mancanza di fondi
+                self.logger.debug(f"💰 RESIZE {ticker}: Cash insufficiente ({simulated_cash:.2f} vs Costo {cost:.2f}). Ridotto a {max_shares_cash}.")
+                shares = max_shares_cash
                 cost = shares * price
             
             if shares < 1:
+                # LOG USCITA: Se alla fine la size è 0
+                self.logger.debug(f"❌ SKIP {ticker}: Quantità finale pari a 0.")
                 continue
+
+            # LOG SUCCESSO
+            self.logger.info(f"✅ BUY {ticker}: {shares} shares @ {price:.2f} (Stop: {stop_loss_price:.2f})")
 
             orders.append({
                 "ticker": ticker,

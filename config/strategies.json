@@ -1,5 +1,9 @@
 {
     "active_strategy": "RSI",
+	"risk_params": {
+        "risk_per_trade": 0.02,
+        "stop_atr_multiplier": 2.0,
+    },
     "strategies_params": {
         "EMA": {
             "short_window": 50,

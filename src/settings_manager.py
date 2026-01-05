@@ -52,6 +52,26 @@ class SettingsManager:
             raise ValueError(f"Chiave 'active_strategy' mancante in {self.file_path}")
         return cfg["active_strategy"]
 
+    def get_risk_params(self) -> Dict[str, Any]:
+        """
+        Ritorna i parametri di rischio.
+        Strict Mode: Alza errore se mancano nel JSON.
+        """
+        cfg = self.load_config()
+        
+        if "risk_params" not in cfg:
+            raise ValueError(f"CRITICAL: Chiave 'risk_params' mancante in {self.file_path}. Impossibile calcolare il rischio.")
+            
+        params = cfg["risk_params"]
+        
+        # Validazione extra opzionale: controlliamo che ci siano le chiavi essenziali
+        required = ["risk_per_trade", "stop_atr_multiplier"]
+        for key in required:
+            if key not in params:
+                raise ValueError(f"CRITICAL: Parametro di rischio '{key}' mancante in config.")
+                
+        return params
+
     def get_strategy_params(self, strategy_name: str = None) -> Dict[str, Any]:
         """
         Ritorna i parametri per una specifica strategia.
