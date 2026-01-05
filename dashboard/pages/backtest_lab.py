@@ -242,6 +242,15 @@ with tab_results:
                 with c1:
                     st.write("**Configuration Used:**")
                     st.json(d_data['config'].get('params', {}))
+                    
+                    st.write("**Risk Configuration:**")
+                    # Usa .get() per retrocompatibilità con vecchi backtest che non hanno questa chiave
+                    risk_conf = d_data['config'].get('risk_params', {})
+                    if risk_conf:
+                        st.json(risk_conf)
+                    else:
+                        st.caption("Risk params not available for this run.")
+                    
                     st.write("**Stats:**")
                     st.write(f"- Initial Capital: € {d_data['config'].get('initial_capital', 0):,.2f}")
                     st.write(f"- Final Equity: € {d_data['config'].get('final_equity', 0):,.2f}")

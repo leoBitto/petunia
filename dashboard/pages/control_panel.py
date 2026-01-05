@@ -78,9 +78,8 @@ with tab_ops:
 # TAB 2: STRATEGY CONFIGURATION (JSON Manager)
 # ==============================================================================
 with tab_strat:
-    st.subheader("⚙️ Algorithmic Rules")
+    st.subheader("⚙️ Algorithmic & Risk Rules")
     
-    # 1. Caricamento Config
     try:
         manager = SettingsManager()
         config = manager.load_config()
@@ -88,78 +87,79 @@ with tab_strat:
         st.error(f"Errore caricamento configurazione: {e}")
         st.stop()
 
-    c_active, c_params = st.columns([1, 2])
+    # Layout a 3 Colonne: Strategia Attiva | Parametri Strategia | Parametri Rischio
+    c_active, c_strat_params, c_risk_params = st.columns([1, 1.5, 1.5])
 
-    # --- SELEZIONE STRATEGIA ---
+    # 1. STRATEGIA ATTIVA
     with c_active:
         with st.container(border=True):
-            st.write("#### 🎯 Active Strategy")
-            st.caption("Questa strategia verrà eseguita al prossimo Weekly Run.")
-            
+            st.write("#### 🎯 Active Engine")
             current_active = config.get("active_strategy", "RSI")
-            available_strategies = list(STRATEGY_MAP.keys())
+            available = list(STRATEGY_MAP.keys())
             
-            new_active = st.radio(
-                "Seleziona Motore:",
-                available_strategies,
-                index=available_strategies.index(current_active) if current_active in available_strategies else 0
-            )
+            new_active = st.radio("Strategy:", available, index=available.index(current_active) if current_active in available else 0)
             
             if new_active != current_active:
-                if st.button("💾 Save Active Strategy"):
+                if st.button("💾 Set Active"):
                     config["active_strategy"] = new_active
                     manager.save_config(config)
-                    st.success(f"Strategia attiva impostata su: **{new_active}**")
+                    st.success(f"Attiva: {new_active}")
                     time.sleep(1)
                     st.rerun()
 
-    # --- PARAMETRI STRATEGIA ---
-    with c_params:
+    # 2. PARAMETRI STRATEGIA
+    with c_strat_params:
         with st.container(border=True):
-            st.write(f"#### 🔧 Parameters: {new_active}")
+            st.write(f"#### 📊 {new_active} Settings")
+            current_strat_params = config.get("strategies_params", {}).get(new_active, {})
             
-            current_params = config.get("strategies_params", {}).get(new_active, {})
-            
-            with st.form(key="strategy_params_form"):
-                updated_params = {}
-                
-                # UI Dinamica in base alla strategia
+            with st.form(key="strat_form"):
+                updated_strat = {}
                 if new_active == "RSI":
-                    k1, k2 = st.columns(2)
-                    with k1:
-                        updated_params['rsi_period'] = st.number_input("RSI Period", value=current_params.get('rsi_period', 14))
-                        updated_params['atr_period'] = st.number_input("ATR Period", value=current_params.get('atr_period', 14))
-                    with k2:
-                        updated_params['rsi_lower'] = st.slider("Oversold (<)", 10, 45, current_params.get('rsi_lower', 30))
-                        updated_params['rsi_upper'] = st.slider("Overbought (>)", 55, 90, current_params.get('rsi_upper', 70))
-
+                    updated_strat['rsi_period'] = st.number_input("RSI Period", value=current_strat_params.get('rsi_period', 14))
+                    updated_strat['rsi_lower'] = st.number_input("Lower (<)", value=current_strat_params.get('rsi_lower', 30))
+                    updated_strat['rsi_upper'] = st.number_input("Upper (>)", value=current_strat_params.get('rsi_upper', 70))
+                    updated_strat['atr_period'] = st.number_input("ATR Period", value=current_strat_params.get('atr_period', 14))
                 elif new_active == "EMA":
-                    k1, k2 = st.columns(2)
-                    with k1:
-                        updated_params['short_window'] = st.number_input("Fast EMA", value=current_params.get('short_window', 50))
-                        updated_params['atr_period'] = st.number_input("ATR Period", value=current_params.get('atr_period', 14))
-                    with k2:
-                        updated_params['long_window'] = st.number_input("Slow EMA", value=current_params.get('long_window', 200))
+                    updated_strat['short_window'] = st.number_input("Fast EMA", value=current_strat_params.get('short_window', 50))
+                    updated_strat['long_window'] = st.number_input("Slow EMA", value=current_strat_params.get('long_window', 200))
+                    updated_strat['atr_period'] = st.number_input("ATR Period", value=current_strat_params.get('atr_period', 14))
                 
-                else:
-                    st.warning("UI non disponibile per questa strategia. Usa JSON raw.")
-                    # Fallback generico: mostriamo il JSON editabile come testo? Per ora manteniamo i vecchi valori
-                    updated_params = current_params
-
-                submit = st.form_submit_button("💾 Update Parameters")
-                
-                if submit:
-                    if "strategies_params" not in config:
-                        config["strategies_params"] = {}
-                    config["strategies_params"][new_active] = updated_params
+                if st.form_submit_button("💾 Save Strategy Params"):
+                    if "strategies_params" not in config: config["strategies_params"] = {}
+                    config["strategies_params"][new_active] = updated_strat
                     manager.save_config(config)
-                    st.success("Parametri salvati!")
+                    st.success("Strategy Saved!")
                     time.sleep(1)
                     st.rerun()
 
-    with st.expander("🔍 View Raw JSON"):
-        st.json(config)
+    # 3. PARAMETRI RISCHIO (NUOVO!)
+    with c_risk_params:
+        with st.container(border=True):
+            st.write("#### ⚖️ Risk Management")
+            current_risk = config.get("risk_params", {})
+            
+            with st.form(key="risk_form"):
+                # Valori di default di visualizzazione se il json è vuoto
+                def_risk_trade = current_risk.get("risk_per_trade", 0.02)
+                def_stop_atr = current_risk.get("stop_atr_multiplier", 2.0)
+                
+                # Input
+                new_risk_trade = st.number_input("Risk per Trade (%)", min_value=0.01, max_value=0.20, value=float(def_risk_trade), step=0.01, format="%.2f")
+                new_stop_atr = st.number_input("Stop Loss (x ATR)", min_value=0.5, max_value=5.0, value=float(def_stop_atr), step=0.1)
+                
+                if st.form_submit_button("💾 Save Risk Params"):
+                    config["risk_params"] = {
+                        "risk_per_trade": new_risk_trade,
+                        "stop_atr_multiplier": new_stop_atr
+                    }
+                    manager.save_config(config)
+                    st.success("Risk Params Saved!")
+                    time.sleep(1)
+                    st.rerun()
 
+    with st.expander("🔍 Raw JSON Config"):
+        st.json(config)
 # ==============================================================================
 # TAB 3: SYSTEM LOGS
 # ==============================================================================
