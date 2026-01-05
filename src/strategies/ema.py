@@ -4,20 +4,13 @@ from typing import Dict
 from .base import StrategyBase
 
 class StrategyEMA(StrategyBase):
-    """
-    Strategia Trend Following basata su incrocio medie mobili esponenziali (EMA).
-    Segnale BUY: EMA_short > EMA_long
-    Segnale SELL: EMA_short < EMA_long
-    """
-
     def __init__(self, short_window: int = 50, long_window: int = 200, atr_period: int = 14):
         super().__init__("EMA_Crossover")
-        self.short_window = short_window
-        self.long_window = long_window
-        self.atr_period = atr_period
+        self.short_window = int(short_window)
+        self.long_window = int(long_window)
+        self.atr_period = int(atr_period)
 
     def _calculate_atr(self, df: pd.DataFrame, period: int) -> pd.Series:
-        """Calcolo ATR manuale (identico a RSI, potremmo portarlo in Base in futuro)."""
         high = df['high']
         low = df['low']
         close = df['close']
@@ -26,63 +19,46 @@ class StrategyEMA(StrategyBase):
         tr2 = (high - close.shift()).abs()
         tr3 = (low - close.shift()).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        return tr.ewm(alpha=1.0/period, adjust=False).mean()
+        return tr.ewm(alpha=1.0/period, min_periods=period, adjust=False).mean()
 
     def compute(self, data_map: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         signals_list = []
-        self.logger.info(f"Avvio strategia EMA Cross ({self.short_window}/{self.long_window}) su {len(data_map)} ticker.")
+        self.logger.info(f"Avvio strategia EMA (Vectorized) su {len(data_map)} ticker.")
 
         for ticker, df in data_map.items():
-            # 1. Validazione Dati
             if len(df) < self.long_window:
                 continue
 
-            df = df.copy().sort_values('date')
+            d = df.copy().sort_values('date')
 
-            # 2. Calcolo Indicatori
-            try:
-                df['EMA_short'] = df['close'].ewm(span=self.short_window, adjust=False).mean()
-                df['EMA_long'] = df['close'].ewm(span=self.long_window, adjust=False).mean()
-                df['ATR'] = self._calculate_atr(df, self.atr_period)
-            except Exception as e:
-                self.logger.error(f"Errore calcolo math {ticker}: {e}")
-                continue
+            # 1. Calcolo Indicatori
+            d['ema_short'] = d['close'].ewm(span=self.short_window, adjust=False).mean()
+            d['ema_long'] = d['close'].ewm(span=self.long_window, adjust=False).mean()
+            d['atr'] = self._calculate_atr(d, self.atr_period)
 
-            # 3. Analisi Ultima Riga
-            last_row = df.iloc[-1]
-            ema_s = last_row['EMA_short']
-            ema_l = last_row['EMA_long']
-            atr_val = last_row['ATR']
-            price = last_row['close']
+            # 2. Logica Vettoriale
+            d['signal'] = 'HOLD'
+            # BUY: Quando la Short è SOPRA la Long (Trend Up)
+            d.loc[d['ema_short'] > d['ema_long'], 'signal'] = 'BUY'
+            # SELL: Quando la Short è SOTTO la Long (Trend Down)
+            d.loc[d['ema_short'] < d['ema_long'], 'signal'] = 'SELL'
 
-            if pd.isna(ema_s) or pd.isna(ema_l) or pd.isna(atr_val):
-                continue
+            # 3. Pulizia
+            d.dropna(subset=['ema_short', 'ema_long', 'atr'], inplace=True)
 
-            # 4. Logica Trading
-            # Trend Following: Se short > long siamo in trend UP -> BUY/HOLD
-            # Se short < long siamo in trend DOWN -> SELL
+            # 4. Output
+            output = d[['date', 'ticker', 'close', 'signal', 'atr']].copy()
+            output.rename(columns={'close': 'price'}, inplace=True)
             
-            signal = "HOLD"
-            if ema_s > ema_l:
-                signal = "BUY"
-            elif ema_s < ema_l:
-                signal = "SELL"
+            # Meta dati per capire quanto sono distanti le medie
+            output['meta'] = output.apply(lambda x: {
+                'ema_s': round(x['ema_short'], 2), 
+                'ema_l': round(x['ema_long'], 2)
+            }, axis=1)
 
-            # 5. Output
-            signals_list.append({
-                "ticker": ticker,
-                "date": last_row['date'],
-                "signal": signal,
-                "atr": atr_val,
-                "price": price,
-                "meta": {
-                    "ema_short": round(ema_s, 2),
-                    "ema_long": round(ema_l, 2),
-                    "diff": round(ema_s - ema_l, 2)
-                }
-            })
+            signals_list.append(output)
 
         if not signals_list:
-            return pd.DataFrame(columns=['ticker', 'date', 'signal', 'atr', 'meta'])
+            return pd.DataFrame()
             
-        return pd.DataFrame(signals_list)
+        return pd.concat(signals_list, ignore_index=True)

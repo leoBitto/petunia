@@ -4,106 +4,78 @@ from typing import Dict
 from .base import StrategyBase
 
 class StrategyRSI(StrategyBase):
-    """
-    Strategia Mean Reversion basata su RSI (Relative Strength Index).
-    Implementazione NATIVA (No pandas-ta) per massima stabilità.
-    """
-
     def __init__(self, rsi_period: int = 14, rsi_lower: int = 30, rsi_upper: int = 70, atr_period: int = 14):
         super().__init__("RSI_MeanReversion")
-        self.rsi_period = rsi_period
-        self.rsi_lower = rsi_lower
-        self.rsi_upper = rsi_upper
-        self.atr_period = atr_period
+        self.rsi_period = int(rsi_period)
+        self.rsi_lower = int(rsi_lower)
+        self.rsi_upper = int(rsi_upper)
+        self.atr_period = int(atr_period)
 
     def _calculate_rsi(self, series: pd.Series, period: int) -> pd.Series:
-        """Calcolo RSI manuale usando Wilder's Smoothing (equivalente a pandas-ta)."""
         delta = series.diff()
-        
-        # Separiamo guadagni e perdite
-        gain = delta.where(delta > 0, 0.0)
-        loss = -delta.where(delta < 0, 0.0)
+        gain = (delta.where(delta > 0, 0)).fillna(0)
+        loss = (-delta.where(delta < 0, 0)).fillna(0)
 
-        # Wilder's Smoothing usa alpha = 1/period
-        alpha = 1.0 / period
-        
-        avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+        avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
 
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
         return rsi
 
     def _calculate_atr(self, df: pd.DataFrame, period: int) -> pd.Series:
-        """Calcolo ATR manuale."""
         high = df['high']
         low = df['low']
         close = df['close']
         
-        # True Range Calculation
         tr1 = high - low
         tr2 = (high - close.shift()).abs()
         tr3 = (low - close.shift()).abs()
-        
-        # Prende il massimo tra i 3 metodi per ogni riga
+
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
-        # ATR è la media mobile esponenziale (Wilder's) del TR
-        atr = tr.ewm(alpha=1.0/period, adjust=False).mean()
+        atr = tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
         return atr
 
     def compute(self, data_map: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         signals_list = []
-        
-        self.logger.info(f"Avvio strategia RSI (Native) su {len(data_map)} ticker.")
+        self.logger.info(f"Avvio strategia RSI (Vectorized) su {len(data_map)} ticker.")
 
         for ticker, df in data_map.items():
-            # 1. Validazione
-            min_rows = max(self.rsi_period, self.atr_period) + 5
-            if len(df) < min_rows:
+            if len(df) < self.rsi_period + 5:
                 continue
+            
+            # Copia e ordina
+            d = df.copy().sort_values('date')
 
-            # Lavoriamo su una copia per non sporcare i dati originali
-            df = df.copy().sort_values('date')
+            # 1. Calcolo Indicatori (Vettoriale: crea colonne intere)
+            d['rsi'] = self._calculate_rsi(d['close'], self.rsi_period)
+            d['atr'] = self._calculate_atr(d, self.atr_period)
 
-            try:
-                # 2. Calcolo Indicatori Manuale
-                df['RSI'] = self._calculate_rsi(df['close'], self.rsi_period)
-                df['ATR'] = self._calculate_atr(df, self.atr_period)
-            except Exception as e:
-                self.logger.error(f"Errore calcolo math {ticker}: {e}")
-                continue
+            # 2. Logica Vettoriale (Applica regole a tutte le righe)
+            d['signal'] = 'HOLD'
+            d.loc[d['rsi'] < self.rsi_lower, 'signal'] = 'BUY'
+            d.loc[d['rsi'] > self.rsi_upper, 'signal'] = 'SELL'
 
-            # 3. Analisi Ultima Riga
-            last_row = df.iloc[-1]
-            rsi_val = last_row['RSI']
-            atr_val = last_row['ATR']
-            price = last_row['close']
+            # 3. Pulizia (Rimuovi righe iniziali con NaN dovuti al calcolo)
+            d.dropna(subset=['rsi', 'atr'], inplace=True)
 
-            if pd.isna(rsi_val) or pd.isna(atr_val):
-                continue
+            # 4. Formattazione
+            # Selezioniamo solo le colonne utili e aggiungiamo meta
+            # Nota: 'meta' vettoriale è complesso, per ora lo semplifichiamo o lo mettiamo vuoto
+            # Per debug veloce, mettiamo RSI come colonna esplicita o stringa nel meta se serve
+            # Qui per performance teniamo meta semplice
+            
+            output = d[['date', 'ticker', 'close', 'signal', 'atr']].copy()
+            # Rinominiamo close in price per coerenza col resto del sistema
+            output.rename(columns={'close': 'price'}, inplace=True)
+            
+            # Meta dati riga per riga (lento ma utile per debug)
+            # Se vuoi velocità massima, togli questo apply
+            output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
 
-            # 4. Logica Trading
-            signal = "HOLD"
-            if rsi_val < self.rsi_lower:
-                signal = "BUY"
-            elif rsi_val > self.rsi_upper:
-                signal = "SELL"
-
-            # 5. Output
-            signals_list.append({
-                "ticker": ticker,
-                "date": last_row['date'],
-                "signal": signal,
-                "atr": atr_val,
-                "price": price,
-                "meta": {
-                    "rsi": round(rsi_val, 2),
-                    "note": f"RSI: {rsi_val:.2f}"
-                }
-            })
+            signals_list.append(output)
 
         if not signals_list:
-            return pd.DataFrame(columns=['ticker', 'date', 'signal', 'atr', 'meta'])
-            
-        return pd.DataFrame(signals_list)
+            return pd.DataFrame()
+
+        return pd.concat(signals_list, ignore_index=True)

@@ -1,120 +1,100 @@
 import pandas as pd
 from datetime import datetime
-
 from src.database_manager import DatabaseManager
 from src.portfolio_manager import PortfolioManager
-from src.yfinance_manager import YFinanceManager
-from src.drive_manager import DriveManager
 from src.risk_manager import RiskManager
 from src.settings_manager import SettingsManager
+from src.strategies import get_strategy
 from src.logger import get_logger
-
-# Importiamo SOLO il Factory Method, non le classi specifiche
-from src.strategies import get_strategy 
 
 logger = get_logger("WeeklyRun")
 
 def main():
-    logger.info("📅 Inizio Weekly Run (Strategy & Risk Analysis)...")
+    logger.info("🚀 Avvio Weekly Run (Strategia + Esecuzione)...")
     
-    # 1. INIT MANAGERS
-    try:
-        db = DatabaseManager()
-        pm = PortfolioManager()
-        yf = YFinanceManager()
-        dm = DriveManager()
-        settings = SettingsManager() # Carica config/strategies.json
-    except Exception as e:
-        logger.critical(f"Errore inizializzazione manager: {e}")
-        return
+    # 1. Setup Manager
+    db = DatabaseManager()
+    settings = SettingsManager()
+    pm = PortfolioManager()
     
-    # 2. CONFIGURAZIONE DINAMICA STRATEGIA
+    # Carichiamo config rischio e strategia
     try:
-        # Leggiamo dal JSON quale strategia usare
         active_strat_name = settings.get_active_strategy_name()
         strat_params = settings.get_strategy_params(active_strat_name)
+        risk_params = settings.get_risk_params()
         
-        logger.info(f"⚙️  Strategia Attiva: {active_strat_name}")
-        logger.info(f"🔧 Parametri: {strat_params}")
+        # Risk Manager inizializzato coi parametri JSON
+        rm = RiskManager(
+            risk_per_trade=risk_params["risk_per_trade"],
+            stop_atr_multiplier=risk_params["stop_atr_multiplier"]
+        )
         
-        # FACTORY PATTERN: Istanziamo la classe corretta al volo
-        strategy = get_strategy(active_strat_name, **strat_params)
+        logger.info(f"⚙️ Config: {active_strat_name} | Risk: {risk_params['risk_per_trade']*100}%")
         
     except Exception as e:
-        logger.critical(f"Errore caricamento strategia da config: {e}")
+        logger.critical(f"❌ Errore Configurazione: {e}")
         return
 
-    # Inizializziamo Risk Manager (NB: potremmo parametrizzare anche questo in futuro)
-    risk_manager = RiskManager(risk_per_trade=0.02, stop_atr_multiplier=2.0)
+    # 2. Fetch Dati (Serve storico sufficiente per gli indicatori!)
+    # Scarichiamo es. 365 giorni per essere sicuri che EMA200 funzioni
+    logger.info("📥 Caricamento dati storici dal DB...")
+    data_map = db.get_ohlc_all_tickers(days=365)
     
-    # 3. LOAD STATE
-    try:
-        pm.load_from_db(db.load_portfolio())
-        current_equity = pm.get_total_equity()
-        logger.info(f"💰 Equity Iniziale: {current_equity:.2f} €")
-    except Exception as e:
-        logger.error(f"Errore caricamento portfolio: {e}")
+    if not data_map:
+        logger.warning("⚠️ Nessun dato sufficiente per l'analisi.")
         return
 
-    # 4. DATA FETCH (Universe + Portfolio)
-    universe_tkr = dm.get_universe_tickers()
-    portfolio_tkr = pm.df_portfolio["ticker"].tolist()
-    all_tickers = list(set(universe_tkr + portfolio_tkr))
+    # 3. Calcolo Segnali (VETTORIALE - Restituisce tutto lo storico)
+    strategy = get_strategy(active_strat_name, **strat_params)
+    all_signals = strategy.compute(data_map)
     
-    if not all_tickers:
-        logger.warning("Nessun ticker da analizzare.")
+    if all_signals.empty:
+        logger.info("💤 Nessun segnale generato dalla strategia.")
         return
 
-    logger.info(f"Aggiornamento dati per {len(all_tickers)} ticker...")
-    # Scarichiamo dati recenti per aggiornare il DB
-    new_data = yf.fetch_ohlc(all_tickers, days=5)
-    db.upsert_ohlc(new_data)
+    # ------------------------------------------------------------------
+    # 4. FILTRO "SOLO OGGI" 
+    # ------------------------------------------------------------------
+    # Troviamo la data più recente presente nei segnali
+    # (Attenzione: Potrebbe essere Venerdì scorso se è Lunedì mattina e non abbiamo scaricato)
+    latest_date = all_signals['date'].max()
     
-    # 5. STRATEGY ENGINE
-    # Per la strategia servono dati storici profondi (es. EMA 200 richiede >200 giorni)
-    logger.info("Recupero storico e calcolo segnali...")
-    historical_data = db.get_ohlc_all_tickers(days=365)
+    logger.info(f"📆 Filtraggio segnali per l'ultima data disponibile: {latest_date}")
     
-    if not historical_data:
-        logger.error("Nessun dato storico trovato nel DB.")
+    # Prendiamo solo i segnali dell'ultimo giorno disponibile
+    latest_signals = all_signals[all_signals['date'] == latest_date].copy()
+    
+    if latest_signals.empty:
+        logger.warning("⚠️ Strano: Nessun segnale per l'ultima data.")
         return
 
-    # Calcolo della strategia dinamica
-    df_signals = strategy.compute(historical_data)
-    
-    # Filtro ultimo segnale (Venerdì/Oggi)
-    if df_signals.empty:
-        logger.info("Nessun segnale generato dalla strategia.")
-        latest_signals = pd.DataFrame()
-    else:
-        last_date = df_signals['date'].max()
-        latest_signals = df_signals[df_signals['date'] == last_date]
-        logger.info(f"Analisi segnali per data: {last_date.date()}")
+    # Logghiamo cosa abbiamo trovato oggi
+    buy_signals = latest_signals[latest_signals['signal'] == 'BUY']
+    sell_signals = latest_signals[latest_signals['signal'] == 'SELL']
+    logger.info(f"🔎 Analisi Oggi: {len(buy_signals)} BUY, {len(sell_signals)} SELL su {len(latest_signals)} ticker.")
 
-    # 6. RISK MANAGER & ORDER GENERATION
-    pos_dict = dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
-    available_cash = float(pm.df_cash.iloc[0]['cash']) if not pm.df_cash.empty else 0.0
-    
-    logger.info("Valutazione Rischio...")
-    orders = risk_manager.evaluate(
-        signals_df=latest_signals,
-        total_equity=current_equity,
-        available_cash=available_cash,
-        current_positions=pos_dict
+    # 5. Esecuzione (Mark-to-Market & Risk Management)
+    # Aggiorniamo i prezzi del portafoglio all'ultimo prezzo noto
+    current_prices = dict(zip(latest_signals['ticker'], latest_signals['price']))
+    pm.update_market_prices(current_prices)
+
+    # Risk Manager valuta SOLO i segnali filtrati
+    orders = rm.evaluate(
+        latest_signals, 
+        pm.get_total_equity(), 
+        float(pm.df_cash.iloc[0]['cash']), 
+        dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
     )
     
-    # 7. OUTPUT -> GOOGLE SHEETS
-    if orders:
-        logger.info(f"✅ Generati {len(orders)} ordini operativi.")
-        for o in orders:
-            logger.info(f"   -> {o['action']} {o['ticker']} Qty:{o['quantity']} @ {o['price']:.2f}")
+    # 6. Invio Ordini
+    if not orders:
+        logger.info("✅ Nessun ordine da eseguire oggi.")
     else:
-        logger.info("😴 Nessun ordine generato (Risk Manager o Nessun Segnale).")
-
-    # Questo sovrascrive il tab "Orders" nel tuo Report Sheet
-    dm.save_pending_orders(orders)
-    
-    logger.info("✅ Weekly Run completata. Ordini aggiornati su Drive.")
+        for order in orders:
+            logger.info(f"🔔 ESECUZIONE: {order['action']} {order['quantity']} {order['ticker']}")
+            pm.execute_order(order)
+            
+    logger.info("🏁 Weekly Run Completata.")
 
 if __name__ == "__main__":
     main()
