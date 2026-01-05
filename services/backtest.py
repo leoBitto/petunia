@@ -102,6 +102,7 @@ def _execute_single_strategy(strategy_name: str,
 
     # 2. ESECUZIONE STRATEGIA
     try:
+        logger.info(f"strategy name: {strategy_name}")
         strategy = get_strategy(strategy_name, **strategy_params)
         all_signals = strategy.compute(data_map)
     except Exception as e:

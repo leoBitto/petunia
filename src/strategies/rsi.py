@@ -5,13 +5,16 @@ from .base import StrategyBase
 
 class StrategyRSI(StrategyBase):
     def __init__(self, rsi_period: int = 14, rsi_lower: int = 30, rsi_upper: int = 70, atr_period: int = 14):
+        # Chiamata al costruttore base
         super().__init__("RSI_MeanReversion")
+        # Parametri salvati
         self.rsi_period = int(rsi_period)
         self.rsi_lower = int(rsi_lower)
         self.rsi_upper = int(rsi_upper)
         self.atr_period = int(atr_period)
 
     def _calculate_rsi(self, series: pd.Series, period: int) -> pd.Series:
+        """Calcolo RSI manuale."""
         delta = series.diff()
         gain = (delta.where(delta > 0, 0)).fillna(0)
         loss = (-delta.where(delta < 0, 0)).fillna(0)
@@ -24,6 +27,7 @@ class StrategyRSI(StrategyBase):
         return rsi
 
     def _calculate_atr(self, df: pd.DataFrame, period: int) -> pd.Series:
+        """Calcolo ATR manuale."""
         high = df['high']
         low = df['low']
         close = df['close']
@@ -38,7 +42,8 @@ class StrategyRSI(StrategyBase):
 
     def compute(self, data_map: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         signals_list = []
-        self.logger.info(f"Avvio strategia RSI (Vectorized) su {len(data_map)} ticker.")
+        # Log dei parametri ricevuti (per debuggare la tua ipotesi sui parametri)
+        self.logger.info(f"RSI Params: Period={self.rsi_period}, Lower={self.rsi_lower}, Upper={self.rsi_upper}")
 
         for ticker, df in data_map.items():
             if len(df) < self.rsi_period + 5:
@@ -47,37 +52,34 @@ class StrategyRSI(StrategyBase):
             # Copia e ordina
             d = df.copy().sort_values('date')
 
-            # 1. Calcolo Indicatori (Vettoriale: crea colonne intere)
+            # 1. Calcolo Indicatori (TUTTO MINUSCOLO per coerenza)
             d['rsi'] = self._calculate_rsi(d['close'], self.rsi_period)
             d['atr'] = self._calculate_atr(d, self.atr_period)
 
-            # 2. Logica Vettoriale (Applica regole a tutte le righe)
+            # 2. Logica Vettoriale
             d['signal'] = 'HOLD'
             d.loc[d['rsi'] < self.rsi_lower, 'signal'] = 'BUY'
             d.loc[d['rsi'] > self.rsi_upper, 'signal'] = 'SELL'
 
-            # 3. Pulizia (Rimuovi righe iniziali con NaN dovuti al calcolo)
+            # 3. Pulizia
             d.dropna(subset=['rsi', 'atr'], inplace=True)
 
-            # 4. Formattazione
-            # CORREZIONE: Aggiungiamo 'rsi' alla lista delle colonne da mantenere!
-            output = d[['date', 'ticker', 'close', 'signal', 'atr', 'rsi']].copy()
-            
-            output.rename(columns={'close': 'price'}, inplace=True)
-            
-            output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
+            # 4. Formattazione Output
+            # Selezioniamo ESPLICITAMENTE le colonne in minuscolo create sopra
+            try:
+                # Nota: qui includiamo 'rsi' nella lista
+                output = d[['date', 'ticker', 'close', 'signal', 'atr', 'rsi']].copy()
+                output.rename(columns={'close': 'price'}, inplace=True)
+                
+                # Ora 'rsi' esiste sicuramente
+                output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
 
-            signals_list.append(output)
-            
-            output = d[['date', 'ticker', 'close', 'signal', 'atr']].copy()
-            # Rinominiamo close in price per coerenza col resto del sistema
-            output.rename(columns={'close': 'price'}, inplace=True)
-            
-            # Meta dati riga per riga (lento ma utile per debug)
-            # Se vuoi velocità massima, togli questo apply
-            output['meta'] = output.apply(lambda x: {'rsi': round(x['rsi'], 2)}, axis=1)
-
-            signals_list.append(output)
+                signals_list.append(output)
+            except KeyError as e:
+                # Se esplode qui, stampiamo le colonne disponibili per capire perché
+                self.logger.error(f"CRASH su {ticker}! Colonne disponibili: {d.columns.tolist()}")
+                self.logger.error(f"Errore specifico: {e}")
+                raise e
 
         if not signals_list:
             return pd.DataFrame()
