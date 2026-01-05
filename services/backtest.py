@@ -62,87 +62,138 @@ def _execute_single_strategy(strategy_name: str,
                              output_dir: Path,
                              initial_capital: float,
                              days_history: int):
-    """
-    Esegue logica di backtest per una singola strategia.
-    Riceve TUTTI i parametri necessari, non legge nulla dal disco.
-    """
-    logger.info(f"🚀 Running: {strategy_name} | Params: {strategy_params}")
     
+    print(f"\n--- 🕵️ DEBUG START: {strategy_name} ---")
+    
+    # 1. CHECK DATI INPUT
+    if not data_map:
+        print("❌ ERRORE: data_map è vuoto!")
+        return
+
+    first_ticker = list(data_map.keys())[0]
+    df_example = data_map[first_ticker]
+    print(f"📊 Dati caricati per {len(data_map)} ticker.")
+    print(f"📅 Esempio ({first_ticker}): {len(df_example)} righe.")
+    print(f"   Min Date: {df_example['date'].min()} | Max Date: {df_example['date'].max()}")
+
+    # 2. CALCOLO STRATEGIA
     try:
+        strategy = get_strategy(strategy_name, **strategy_params)
+        all_signals = strategy.compute(data_map)
+    except Exception as e:
+        print(f"❌ ERRORE Strategy Compute: {e}")
+        return
+
+    if all_signals.empty:
+        print("⚠️ Nessun segnale generato (all_signals empty).")
+        return
+
+    # 3. DEBUG DATE SEGNALI
+    all_signals['date'] = pd.to_datetime(all_signals['date'])
+    print(f"🚦 Segnali Generati: {len(all_signals)} righe.")
+    print(f"   Segnali Min Date: {all_signals['date'].min()}")
+    print(f"   Segnali Max Date: {all_signals['date'].max()}")
+    
+    # Conta quanti segnali BUY/SELL ci sono
+    counts = all_signals['signal'].value_counts()
+    print(f"   Distribuzione: {counts.to_dict()}")
+
+    # 4. DEBUG LOOP TEMPORALE
+    all_dates = sorted(list(set(d for df in data_map.values() for d in df['date'])))
+    # Conversione sicura per confronto
+    all_dates_dt = [pd.to_datetime(d) for d in all_dates]
+    
+    start_date = datetime.now() - timedelta(days=days_history)
+    print(f"⏳ Filtro Temporale: Cerco date successive a {start_date.date()}")
+    
+    sim_dates = [d for d in all_dates_dt if d >= pd.Timestamp(start_date)]
+    
+    print(f"🗓️ Giorni nel Loop di Simulazione: {len(sim_dates)}")
+    if len(sim_dates) > 0:
+        print(f"   Prima data sim: {sim_dates[0]} | Ultima: {sim_dates[-1]}")
+    else:
+        print("❌ ERRORE CRITICO: sim_dates è vuoto! Il backtest non girerà.")
+
+    # 5. RISK MANAGER SETUP
+    try:
+        settings = SettingsManager()
+        # Se risk_params arriva vuoto o None, usiamo il getter del manager
+        if not risk_params:
+            risk_params = settings.get_risk_params()
+
         pm = PortfolioManager()
         pm.update_cash(initial_capital)
         
-        # Istanziamo RiskManager usando i parametri ricevuti
         rm = RiskManager(
-            risk_per_trade=risk_params["risk_per_trade"],
-            stop_atr_multiplier=risk_params["stop_atr_multiplier"]
+            risk_per_trade=risk_params.get("risk_per_trade", 0.02),
+            stop_atr_multiplier=risk_params.get("stop_atr_multiplier", 2.0)
+        )
+    except Exception as e:
+        print(f"❌ ERRORE Setup Manager: {e}")
+        return
+
+    equity_curve = []
+    
+    # 6. LOOP ESECUZIONE
+    trades_count = 0
+    for current_date in sim_dates:
+        # Nota: current_date è già Timestamp qui
+        
+        # Mark-to-Market
+        current_prices = {}
+        for ticker, df in data_map.items():
+            # Filtro data. Attenzione: df['date'] nel DB potrebbe essere stringa o object
+            # Per sicurezza convertiamo al volo o assumiamo coerenza se fatto in load
+            row = df[pd.to_datetime(df['date']) == current_date]
+            if not row.empty:
+                current_prices[ticker] = float(row.iloc[0]['close'])
+        
+        pm.update_market_prices(current_prices)
+        
+        # Filtro segnali
+        daily_signals = all_signals[all_signals['date'] == current_date]
+        
+        # DEBUG SUI SEGNALI GIORNALIERI (Solo se ce ne sono)
+        if not daily_signals.empty:
+            relevant = daily_signals[daily_signals['signal'].isin(['BUY', 'SELL'])]
+            if not relevant.empty:
+                # Scommenta se vuoi vedere ogni segnale passare
+                # print(f"   🧐 {current_date.date()}: Trovati {len(relevant)} segnali potenziali.")
+                pass
+
+        orders = rm.evaluate(
+            daily_signals, 
+            pm.get_total_equity(), 
+            float(pm.df_cash.iloc[0]['cash']), 
+            dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
         )
         
-        strategy = get_strategy(strategy_name, **strategy_params)
-        
-        # Compute Signals
-        all_signals = strategy.compute(data_map)
-        
-        if all_signals.empty:
-            logger.warning(f"⚠️ {strategy_name}: Nessun segnale.")
-            save_results(output_dir, strategy_name, pd.DataFrame(), pd.DataFrame(), {"error": "No signals"})
-            return
+        for order in orders:
+            pm.execute_order(order)
+            if order['action'] == 'BUY':
+                trades_count += 1
 
-        all_signals['date'] = pd.to_datetime(all_signals['date'])
-        all_signals.sort_values('date', inplace=True)
+        equity_curve.append({
+            "date": current_date,
+            "equity": pm.get_total_equity()
+        })
 
-        # Simulation Loop
-        all_dates = sorted(list(set(d for df in data_map.values() for d in df['date'])))
-        start_date = datetime.now() - timedelta(days=days_history)
-        sim_dates = [d for d in all_dates if pd.to_datetime(d) >= pd.Timestamp(start_date)]
+    print(f"🏁 Backtest Finito. Trades eseguiti: {trades_count}")
+    print("--- DEBUG END ---\n")
 
-        equity_curve = []
-
-        for current_date in sim_dates:
-            current_date = pd.Timestamp(current_date)
-            
-            # Mark-to-Market
-            current_prices = {}
-            for ticker, df in data_map.items():
-                row = df[df['date'] == current_date]
-                if not row.empty:
-                    current_prices[ticker] = float(row.iloc[0]['close'])
-            
-            pm.update_market_prices(current_prices)
-            
-            # Risk & Exec
-            daily_signals = all_signals[all_signals['date'] == current_date]
-            orders = rm.evaluate(
-                daily_signals, 
-                pm.get_total_equity(), 
-                float(pm.df_cash.iloc[0]['cash']), 
-                dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
-            )
-            
-            for order in orders:
-                pm.execute_order(order)
-
-            equity_curve.append({
-                "date": current_date,
-                "equity": pm.get_total_equity()
-            })
-
-        # Save Report
-        df_equity = pd.DataFrame(equity_curve)
-        final_equity = df_equity.iloc[-1]['equity'] if not df_equity.empty else initial_capital
-        
-        config_dump = {
-            "strategy": strategy_name,
-            "params": strategy_params,
-            "risk_params": risk_params,
-            "initial_capital": initial_capital,
-            "final_equity": final_equity,
-            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL'])
-        }
-        save_results(output_dir, strategy_name, df_equity, pm.df_trades, config_dump)
-
-    except Exception as e:
-        logger.error(f"❌ Errore in _execute_single_strategy ({strategy_name}): {e}")
+    # Save Results (Codice originale)
+    df_equity = pd.DataFrame(equity_curve)
+    final_equity = df_equity.iloc[-1]['equity'] if not df_equity.empty else initial_capital
+    
+    config_dump = {
+        "strategy": strategy_name,
+        "params": strategy_params,
+        "risk_params": risk_params,
+        "initial_capital": initial_capital,
+        "final_equity": final_equity,
+        "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL'])
+    }
+    save_results(output_dir, strategy_name, df_equity, pm.df_trades, config_dump)
 
 # --- API ENTRY POINT ---
 
