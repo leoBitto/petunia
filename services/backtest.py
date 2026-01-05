@@ -78,12 +78,53 @@ def _execute_single_strategy(strategy_name: str,
     logger.info(f"   Min Date: {df_example['date'].min()} | Max Date: {df_example['date'].max()}")
 
     # 2. CALCOLO STRATEGIA
+    # =========================================================================
+    # 🕵️ DEBUG DATA INTEGRITY PROBE
+    # =========================================================================
+    
+    # 1. CONTROLLO INPUT (Cosa stiamo passando alla strategia?)
+    # Prendiamo il primo ticker disponibile per vedere che date ha
+    test_ticker = list(data_map.keys())[0]
+    df_input = data_map[test_ticker]
+    
+    # Estraiamo le date univoche e le ordiniamo
+    input_dates = sorted(pd.to_datetime(df_input['date']).unique())
+    
+    logger.info(f"🔍 PROVA INPUT (Dati dal DB per {test_ticker}):")
+    logger.info(f"   ➡️ Righe Totali: {len(df_input)}")
+    logger.info(f"   ➡️ Date Distinte: {len(input_dates)}")
+    if len(input_dates) > 0:
+        logger.info(f"   ➡️ Range Temporale: {input_dates[0]} -> {input_dates[-1]}")
+        logger.info(f"   ➡️ Prime 3 Date: {[str(d.date()) for d in input_dates[:3]]}")
+        logger.info(f"   ➡️ Ultime 3 Date: {[str(d.date()) for d in input_dates[-3:]]}")
+    else:
+        logger.error("   ❌ ERRORE: Nessuna data trovata nell'input!")
+
+    # 2. ESECUZIONE STRATEGIA
     try:
         strategy = get_strategy(strategy_name, **strategy_params)
         all_signals = strategy.compute(data_map)
     except Exception as e:
         logger.error(f"❌ ERRORE Strategy Compute: {e}")
         return
+
+    # 3. CONTROLLO OUTPUT (Cosa ci ha restituito la strategia?)
+    if all_signals.empty:
+        logger.warning("⚠️ Nessun segnale generato.")
+    else:
+        # Convertiamo date output
+        output_dates = sorted(pd.to_datetime(all_signals['date']).unique())
+        
+        logger.info(f"🔍 PROVA OUTPUT (Risultato Strategia):")
+        logger.info(f"   ⬅️ Righe Totali: {len(all_signals)}")
+        logger.info(f"   ⬅️ Date Distinte: {len(output_dates)}")
+        if len(output_dates) > 0:
+            logger.info(f"   ⬅️ Range Temporale: {output_dates[0]} -> {output_dates[-1]}")
+            logger.info(f"   ⬅️ Prime 3 Date: {[str(d.date()) for d in output_dates[:3]]}")
+        else:
+             logger.error("   ❌ ERRORE: Output dataframe ha date vuote o nulle!")
+
+    # =========================================================================
 
     if all_signals.empty:
         logger.warning("⚠️ Nessun segnale generato (all_signals empty).")
