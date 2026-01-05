@@ -15,13 +15,10 @@ try:
     
     # Usiamo un container colorato per evidenziare la strategia
     with st.container():
-        c_badge, c_link = st.columns([3, 1])
+        c_badge, _ = st.columns([3, 1])
         with c_badge:
             st.info(f"🧠 **Active Intelligence:** The system is currently running on **{active_strat}** strategy.")
-        with c_link:
-            # Purtroppo Streamlit non ha link interni facili, usiamo un testo guida
-            st.caption("Change Strategy in:")
-            st.page_link("pages/control_panel.py", label="🕹️ Control Panel", icon="🔧")
+        
 except Exception as e:
     st.error(f"⚠️ Error loading configuration: {e}")
 
