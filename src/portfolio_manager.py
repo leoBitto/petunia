@@ -78,8 +78,17 @@ class PortfolioManager:
         positions_value = 0.0
         if not self.df_portfolio.empty:
             # Calcolo vettoriale: Moltiplica colonna size per colonna price e somma tutto
-            # fillna(0) protegge da eventuali dati sporchi
-            val_series = (self.df_portfolio["size"].fillna(0) * self.df_portfolio["price"].fillna(0))
+            # 1. pd.to_numeric forza tutto a numero (o NaN) -> colonna diventa float
+            # 2. fillna(0) ora lavora su float -> nessun warning di downcasting da object
+            # 3. astype(int) converte il risultato finale
+            self.df_portfolio["size"] = pd.to_numeric(
+                self.df_portfolio["size"], errors='coerce'
+            ).fillna(0).astype(int)
+
+            self.df_portfolio["price"] = pd.to_numeric(
+                self.df_portfolio["price"], errors='coerce'
+            ).fillna(0.0).astype(float)
+            val_series = (self.df_portfolio["size"] * self.df_portfolio["price"])
             positions_value = val_series.sum()
 
         return float(cash + positions_value)
@@ -238,7 +247,14 @@ class PortfolioManager:
             "action": action,
             "date": datetime.now()
         }
-        self.df_trades = pd.concat([self.df_trades, pd.DataFrame([trade])], ignore_index=True)
+        # Creiamo il DF per la singola riga
+        new_trade_row = pd.DataFrame([trade])
+
+        if self.df_trades.empty:
+            self.df_trades = new_trade_row
+        else:
+            self.df_trades = pd.concat([self.df_trades, new_trade_row], ignore_index=True)
+            
         self.logger.info(f"[Portfolio] Trade eseguito: {action} {size} {ticker} @ {price}")
 
     def update_position(self, ticker: str, size: int, price: float,
@@ -253,7 +269,7 @@ class PortfolioManager:
             # Update esistente
             self.df_portfolio.loc[mask, ["size", "price", "stop_loss", "profit_take", "updated_at"]] = \
                 [size, price, stop_loss, profit_take, now]
-            # self.logger.info(f"[Portfolio] Posizione aggiornata per {ticker}.") # Ridotto log per backtest
+            self.logger.info(f"[Portfolio] Posizione aggiornata per {ticker}.") # Ridotto log per backtest
         else:
             # Insert nuovo
             new_pos = {
@@ -264,8 +280,13 @@ class PortfolioManager:
                 "profit_take": profit_take,
                 "updated_at": now
             }
-            self.df_portfolio = pd.concat([self.df_portfolio, pd.DataFrame([new_pos])], ignore_index=True)
-            # self.logger.info(f"[Portfolio] Nuova posizione aggiunta: {ticker}.")
+            new_pos_row = pd.DataFrame([new_pos])
+
+            if self.df_portfolio.empty:
+                self.df_portfolio = new_pos_row
+            else:
+                self.df_portfolio = pd.concat([self.df_portfolio, new_pos_row], ignore_index=True)
+            self.logger.info(f"[Portfolio] Nuova posizione aggiunta: {ticker}.")
 
     def update_cash(self, cash: float, currency: str = "EUR"):
         """Aggiorna il valore della cassa."""
@@ -275,7 +296,7 @@ class PortfolioManager:
             "currency": currency,
             "updated_at": now
         }])
-        # self.logger.info(f"[Portfolio] Cassa aggiornata: {cash:.2f} {currency}")
+        self.logger.info(f"[Portfolio] Cassa aggiornata: {cash:.2f} {currency}")
 
     def get_positions_summary(self) -> pd.DataFrame:
         return self.df_portfolio.copy()

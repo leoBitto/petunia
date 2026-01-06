@@ -1,6 +1,6 @@
 # src/yfinance_manager.py
 from typing import List, Dict, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 import numpy as np
@@ -23,7 +23,7 @@ class YFinanceManager:
         - auto_adjust: passato esplicitamente a yf.download per rimuovere il FutureWarning
         Restituisce lista di dict: [{ticker, date, open, high, low, close, volume}, ...]
         """
-        end_date = datetime.utcnow().date()
+        end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=days)
         self.logger.info(f"Fetching OHLCV for {len(tickers)} ticker(s) from {start_date} to {end_date}")
 
@@ -80,7 +80,6 @@ class YFinanceManager:
         df_flat['Volume'] = df_flat['Volume'].fillna(0)
         
         # 2. Rimuove infiniti (+inf, -inf)
-        import numpy as np # Assicurati di avere import numpy as np in alto
         df_flat = df_flat.replace([np.inf, -np.inf], 0)
 
         # 3. Clamping (Taglio valori eccessivi)
