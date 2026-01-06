@@ -21,8 +21,11 @@ case "$1" in
     setup)
         echo -e "${GREEN}Inizializzazione Petunia Environment...${NC}"
         
-        # 1. Creiamo le cartelle utente (Log e Credenziali)
-        mkdir -p logs config/credentials
+        # 1. Creiamo le cartelle utente PRIMA di Docker
+        # Questo garantisce che l'owner sia l'utente corrente ($UID), non root
+        mkdir -p logs 
+        mkdir -p config/credentials 
+        mkdir -p data/backtests
         
         # 2. Build
         echo -e "${GREEN}Building Docker Images...${NC}"
