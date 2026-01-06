@@ -95,7 +95,13 @@ Detailed documentation is available in the **[GitHub Wiki](https://github.com/le
 | ✅ | **Dynamic Config** | Allow Strategy & Fee selection via Frontend |
 | ✅ | **Backtest Lab** | Vectorized Engine, Max Drawdown Metrics & Fee Adjustment |
 
-### v2.0 - Cloud Native & DevOps (Next Up)
+### v2.0 - Quantitative Scaling & Optimization
+
+* **Grid Search Optimization:** Automated finding of best parameters (e.g., Best RSI period for Apple vs Tesla).
+* **Universe Expansion:** Scaling data engine to handle 500+ tickers (S&P 500).
+* **Deep Analytics:** Sharpe Ratio, Calmar Ratio, and Monte Carlo simulations.
+
+### v3.0 - Cloud Native & DevOps (Next Up)
 
 | Status | Module | Description |
 | --- | --- | --- |
@@ -104,11 +110,6 @@ Detailed documentation is available in the **[GitHub Wiki](https://github.com/le
 | 🔮 | **Secret Mgr** | Migration to Google Secret Manager (No more .env) |
 | 🔮 | **Automation** | Systemd services & Auto-healing pipelines |
 
-### v3.0 - Quantitative Scaling & Optimization
-
-* **Grid Search Optimization:** Automated finding of best parameters (e.g., Best RSI period for Apple vs Tesla).
-* **Universe Expansion:** Scaling data engine to handle 500+ tickers (S&P 500).
-* **Deep Analytics:** Sharpe Ratio, Calmar Ratio, and Monte Carlo simulations.
 
 ### v4.0 - AI Agent & Alternative Data
 
