@@ -60,13 +60,7 @@ class PortfolioManager:
             "cash": self.df_cash,
             "trades": self.df_trades
         }
-    def get_positions_counts(self) -> Dict[str, int]:
-        """Restituisce un dizionario {ticker: size} per il RiskManager."""
-        if self.df_portfolio.empty:
-            return {}
-        # Crea una Series con indice ticker e valori size, poi converte a dict
-        return self.df_portfolio.set_index("ticker")["size"].to_dict()
-        
+
     # ----------------------
     # Business Logic Core
     # ----------------------
