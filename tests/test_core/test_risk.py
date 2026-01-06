@@ -38,7 +38,7 @@ def test_risk_buy_logic(market_uptrend):
 
 def test_risk_contract_compliance(market_uptrend):
     """Verifica che l'ordine rispetti il CONTRATTO (Schema Validation)."""
-    rm = RiskManager()
+    rm = RiskManager(risk_per_trade=0.02, stop_atr_multiplier=2.0)
     
     # Segnale Finto
     signals_df = pd.DataFrame([{
@@ -48,8 +48,10 @@ def test_risk_contract_compliance(market_uptrend):
     orders = rm.evaluate(signals_df, 10000, 10000, {})
     
     # SCHEMA OBBLIGATORIO
-    REQUIRED_KEYS = {'ticker', 'action', 'quantity', 'price', 'stop_loss', 'meta'}
-    
+    REQUIRED_KEYS = {
+        'ticker', 'action', 'quantity', 'price', 
+        'stop_loss', 'meta', 'order_type', 'take_profit'
+    }
     for order in orders:
         # 1. Verifica Chiavi
         missing = REQUIRED_KEYS - set(order.keys())
@@ -59,10 +61,11 @@ def test_risk_contract_compliance(market_uptrend):
         assert isinstance(order['quantity'], int), "Quantity deve essere intero"
         assert isinstance(order['price'], (float, int)), "Price deve essere numerico"
         assert isinstance(order['stop_loss'], (float, int)), "Stop Loss deve essere numerico"
+        assert order['order_type'] in ["LIMIT", "MARKET"], "Order Type non valido"
 
 def test_risk_sell_logic():
     """Verifica che generi ordini di vendita se richiesto."""
-    rm = RiskManager()
+    rm = RiskManager(risk_per_trade=0.02, stop_atr_multiplier=2.0)
     
     # Segnale SELL
     signals_df = pd.DataFrame([{
@@ -77,3 +80,4 @@ def test_risk_sell_logic():
     assert len(orders) == 1
     assert orders[0]['action'] == "SELL"
     assert orders[0]['quantity'] == 50 # Vende tutto
+    assert order['order_type'] == "MARKET"

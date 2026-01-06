@@ -59,8 +59,6 @@ class StrategyEMA(StrategyBase):
 
             signals_list.append(output)
 
-            signals_list.append(output)
-
         if not signals_list:
             return pd.DataFrame()
             

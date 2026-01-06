@@ -34,8 +34,11 @@ def generate_market_data(trend_type, length=300, start_price=100, volatility=0.0
     lows = np.minimum(opens, closes) * (1 - np.abs(np.random.normal(0, volatility, length)))
     volume = np.random.randint(1000, 50000, length)
 
+    ticker_name = "TEST_TICKER" # Definiamo il nome qui per usarlo sia nella colonna che nella chiave
+
     df = pd.DataFrame({
         'date': dates,
+        'ticker': ticker_name,  # <--- AGGIUNTA FONDAMENTALE
         'open': opens,
         'high': highs,
         'low': lows,
@@ -43,7 +46,7 @@ def generate_market_data(trend_type, length=300, start_price=100, volatility=0.0
         'volume': volume
     })
     
-    return {"TEST_TICKER": df}
+    return {ticker_name: df}
 
 # --- FIXTURES ---
 @pytest.fixture
