@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import json
+import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -70,7 +71,7 @@ def _execute_single_strategy(strategy_name: str,
                              initial_capital: float,
                              days_history: int):
     
-    logger.info(f"--- 🚀 RUN: {strategy_name} (Fee-Adjusted) ---")
+    logger.info(f"--- 🚀 RUN: {strategy_name} (Weekly Execution / Daily Monitoring) ---")
     
     # 1. Caricamento Commissioni
     try:
@@ -95,20 +96,16 @@ def _execute_single_strategy(strategy_name: str,
         logger.error(f"❌ Setup Error: {e}")
         return
 
-    # 3. Calcolo Segnali
+    # 3. Calcolo Segnali (Vengono calcolati su tutto lo storico in una volta sola)
     try:
         all_signals = strategy.compute(data_map)
     except Exception as e:
         logger.error(f"❌ Strategy Compute Error: {e}")
         return
 
-    if all_signals.empty:
-        logger.warning("⚠️ Nessun segnale generato.")
-        save_results(output_dir, strategy_name, pd.DataFrame(), pd.DataFrame(), {"error": "No signals"})
-        return
-
-    all_signals['date'] = pd.to_datetime(all_signals['date'])
-    all_signals.sort_values('date', inplace=True)
+    if not all_signals.empty:
+        all_signals['date'] = pd.to_datetime(all_signals['date'])
+        all_signals.sort_values('date', inplace=True)
 
     # 4. Setup Loop Temporale
     all_dates = sorted(list(set(d for df in data_map.values() for d in df['date'])))
@@ -119,41 +116,110 @@ def _execute_single_strategy(strategy_name: str,
     trades_count = 0
     total_fees_paid = 0.0
     
-    # 5. Loop Esecuzione
+    # Lista per gli ordini decisi venerdì ed eseguiti lunedì
+    pending_entry_orders = []
+
+    # 5. Loop Esecuzione (GIORNALIERO)
     for current_date in sim_dates:
         current_date = pd.Timestamp(current_date)
+        is_friday = current_date.dayofweek == 4  # 0=Mon, 4=Fri
 
-        # Mark-to-Market
-        current_prices = {}
+        # Recuperiamo i dati di oggi (Open, High, Low, Close)
+        todays_prices = {}
         for ticker, df in data_map.items():
             row = df[pd.to_datetime(df['date']) == current_date]
             if not row.empty:
-                current_prices[ticker] = float(row.iloc[0]['close'])
-        pm.update_market_prices(current_prices)
+                todays_prices[ticker] = {
+                    'open': float(row.iloc[0]['open']),
+                    'high': float(row.iloc[0]['high']),
+                    'low': float(row.iloc[0]['low']),
+                    'close': float(row.iloc[0]['close'])
+                }
+
+        # Aggiorniamo il valore del portfolio con i prezzi di chiusura di oggi (Mark-to-Market)
+        current_closes = {t: data['close'] for t, data in todays_prices.items()}
+        pm.update_market_prices(current_closes)
+
+        # ---------------------------------------------------------------------
+        # FASE A: ESECUZIONE ORDINI PENDENTI (Lunedì mattina / Next Open)
+        # ---------------------------------------------------------------------
+        # Se ci sono ordini nella "busta" (decisi venerdì scorso), li eseguiamo all'OPEN di oggi
+        if pending_entry_orders:
+            executed_orders = []
+            for order in pending_entry_orders:
+                ticker = order['ticker']
+                
+                # Se il titolo è quotato oggi
+                if ticker in todays_prices:
+                    # SIMULAZIONE SLIPPAGE/GAP: Eseguiamo al prezzo di APERTURA reale
+                    execution_price = todays_prices[ticker]['open']
+                    order['price'] = execution_price 
+                    
+                    # Tentativo di esecuzione (il PM controlla se ho cash sufficiente)
+                    if pm.execute_order(order):
+                        # Calcolo fee
+                        trade_val = execution_price * order['quantity']
+                        commission = fee_fixed + (trade_val * fee_pct)
+                        pm.update_cash(float(pm.df_cash.iloc[0]['cash']) - commission)
+                        total_fees_paid += commission
+                        if order['action'] == 'BUY': trades_count += 1
+                        
+            # Svuotiamo la lista ordini pendenti una volta provati tutti
+            pending_entry_orders = []
+
+        # ---------------------------------------------------------------------
+        # FASE B: SORVEGLIANZA GIORNALIERA (Stop Loss & Take Profit)
+        # ---------------------------------------------------------------------
+        # Controlliamo se i massimi/minimi DI OGGI hanno toccato gli stop delle posizioni aperte.
+        # Questo simula gli ordini GTC sul broker.
         
-        # Segnali & Risk
-        daily_signals = all_signals[all_signals['date'] == current_date]
-        orders = rm.evaluate(
-            daily_signals, 
-            pm.get_total_equity(), 
-            float(pm.df_cash.iloc[0]['cash']), 
-            dict(zip(pm.df_portfolio['ticker'], pm.df_portfolio['size']))
+        # Estraiamo High e Low per il Risk Manager
+        todays_highs = {t: data['high'] for t, data in todays_prices.items()}
+        todays_lows = {t: data['low'] for t, data in todays_prices.items()}
+
+        # Chiediamo al RM di controllare SOLO le posizioni esistenti
+        # (Assicurati che RiskManager abbia il metodo check_intraday_stops)
+        exit_orders = rm.check_intraday_stops(
+            pm.get_positions_snapshot(), # Assumi che ritorni un dict {ticker: position_obj/dict}
+            todays_highs, 
+            todays_lows
         )
         
-        for order in orders:
-            pm.execute_order(order)
-            
-            # Applicazione Fee
-            trade_val = order['price'] * order['quantity']
-            commission = fee_fixed + (trade_val * fee_pct)
-            
-            # Sottrazione Cash
-            curr_cash = float(pm.df_cash.iloc[0]['cash'])
-            pm.update_cash(curr_cash - commission)
-            
-            total_fees_paid += commission
-            if order['action'] == 'BUY': trades_count += 1
+        for order in exit_orders:
+            # Eseguiamo l'uscita
+            if pm.execute_order(order):
+                # Fee su uscita
+                trade_val = order['price'] * order['quantity']
+                commission = fee_fixed + (trade_val * fee_pct)
+                pm.update_cash(float(pm.df_cash.iloc[0]['cash']) - commission)
+                total_fees_paid += commission
 
+
+        # ---------------------------------------------------------------------
+        # FASE C: STRATEGIA SETTIMANALE (Solo Venerdì)
+        # ---------------------------------------------------------------------
+        # Se oggi è Venerdì, guardiamo i grafici e prepariamo gli ordini per Lunedì
+        if is_friday and not all_signals.empty:
+            daily_signals = all_signals[all_signals['date'] == current_date]
+            
+            if not daily_signals.empty:
+                # Usiamo evaluate per calcolare size e stop, MA NON ESEGUIAMO
+                # Notare: passiamo il cash attuale, ma gli ordini verranno eseguiti lunedì
+                # con il cash che avremo lunedì (potenzialmente diverso se ci sono costi).
+                # Per semplicità, assumiamo che il cash di venerdì sera sia una buona stima.
+                new_orders = rm.evaluate(
+                    daily_signals, 
+                    pm.get_total_equity(), 
+                    float(pm.df_cash.iloc[0]['cash']), 
+                    pm.get_positions_counts()
+                )
+                
+                # Mettiamo gli ordini in coda per la prossima apertura (Lunedì)
+                pending_entry_orders.extend(new_orders)
+
+        # ---------------------------------------------------------------------
+        # Tracking & Logging
+        # ---------------------------------------------------------------------
         equity_curve.append({
             "date": current_date,
             "equity": pm.get_total_equity()
@@ -161,7 +227,7 @@ def _execute_single_strategy(strategy_name: str,
 
     logger.info(f"🏁 Finito. Trades: {trades_count} | Fees Totali: €{total_fees_paid:.2f}")
 
-    # 6. Reporting
+    # 6. Reporting Finale
     df_equity = pd.DataFrame(equity_curve)
     final_equity = df_equity.iloc[-1]['equity'] if not df_equity.empty else initial_capital
     max_dd = calculate_max_drawdown(df_equity['equity']) if not df_equity.empty else 0.0
@@ -175,7 +241,7 @@ def _execute_single_strategy(strategy_name: str,
         "initial_capital": initial_capital,
         "final_equity": final_equity,
         "metrics": {
-            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL']), # Trade Chiusi
+            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL']),
             "total_fees": round(total_fees_paid, 2),
             "max_drawdown_pct": round(max_dd, 2),
             "roi_pct": round(roi, 2)

@@ -147,3 +147,52 @@ class RiskManager:
             simulated_cash -= cost
 
         return orders
+        
+    def check_intraday_stops(self, 
+                             current_positions: Dict[str, Any], 
+                             daily_prices: Dict[str, Dict[str, float]]) -> List[Dict[str, Any]]:
+        """
+        Punto 1.c: Controlla se i massimi/minimi di oggi hanno toccato SL o TP.
+        Non serve nessun segnale strategico qui.
+        """
+        orders = []
+        
+        for ticker, pos_data in current_positions.items():
+            # Recuperiamo i livelli chiave salvati al momento dell'acquisto
+            stop_loss = pos_data.get('stop_loss')
+            take_profit = pos_data.get('take_profit')
+            qty = pos_data.get('quantity')
+            
+            # Prezzi di oggi
+            if ticker not in daily_prices:
+                continue
+                
+            today_low = daily_prices[ticker]['low']
+            today_high = daily_prices[ticker]['high']
+            
+            # 1. Controllo STOP LOSS (Priorità assoluta)
+            # Se il minimo di oggi è sceso sotto lo stop, siamo usciti.
+            if stop_loss and today_low <= stop_loss:
+                self.logger.info(f"🛑 STOP LOSS HIT per {ticker}: Low {today_low} <= SL {stop_loss}")
+                orders.append({
+                    "ticker": ticker,
+                    "action": "SELL",
+                    "reason": "STOP_LOSS",
+                    "quantity": qty,
+                    "price": stop_loss  # Nel backtest usiamo il prezzo SL (o slippage)
+                })
+                continue # Se scatta lo stop, non controlliamo il profitto
+                
+            # 2. Controllo TAKE PROFIT
+            # Se il massimo di oggi ha superato il target, abbiamo incassato.
+            if take_profit and today_high >= take_profit:
+                self.logger.info(f"💰 TAKE PROFIT HIT per {ticker}: High {today_high} >= TP {take_profit}")
+                orders.append({
+                    "ticker": ticker,
+                    "action": "SELL",
+                    "reason": "TAKE_PROFIT",
+                    "quantity": qty,
+                    "price": take_profit
+                })
+                
+        return orders
