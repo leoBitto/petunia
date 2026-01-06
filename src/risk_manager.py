@@ -152,47 +152,63 @@ class RiskManager:
                              current_positions: Dict[str, Any], 
                              daily_prices: Dict[str, Dict[str, float]]) -> List[Dict[str, Any]]:
         """
-        Punto 1.c: Controlla se i massimi/minimi di oggi hanno toccato SL o TP.
-        Non serve nessun segnale strategico qui.
+        Controlla Stop Loss e Take Profit intraday.
+        Gestisce il GAP RISK: se Open < Stop Loss, esce all'Open.
         """
         orders = []
         
         for ticker, pos_data in current_positions.items():
-            # Recuperiamo i livelli chiave salvati al momento dell'acquisto
             stop_loss = pos_data.get('stop_loss')
             take_profit = pos_data.get('take_profit')
-            qty = pos_data.get('quantity')
+            qty = pos_data.get('quantity') # Assicurati che la chiave sia 'quantity' o 'size'
             
-            # Prezzi di oggi
+            # Se non abbiamo dati per questo ticker oggi, saltiamo
             if ticker not in daily_prices:
                 continue
-                
+            
+            # Estraiamo i prezzi di oggi
+            today_open = daily_prices[ticker]['open']
             today_low = daily_prices[ticker]['low']
             today_high = daily_prices[ticker]['high']
             
-            # 1. Controllo STOP LOSS (Priorità assoluta)
-            # Se il minimo di oggi è sceso sotto lo stop, siamo usciti.
+            # 1. LOGICA STOP LOSS (con GAP PROTECTION)
             if stop_loss and today_low <= stop_loss:
-                self.logger.info(f"🛑 STOP LOSS HIT per {ticker}: Low {today_low} <= SL {stop_loss}")
+                # Se il mercato ha aperto GIÀ sotto lo stop (Gap Down), usciamo all'Open
+                # Altrimenti usciamo al prezzo di Stop
+                exit_price = stop_loss
+                reason = "STOP_LOSS"
+                
+                if today_open < stop_loss:
+                    exit_price = today_open
+                    reason = "STOP_LOSS_GAP"
+                    self.logger.warning(f"📉 GAP DOWN su {ticker}: Open {today_open} < SL {stop_loss}. Uscita all'Open.")
+                else:
+                    self.logger.info(f"🛑 STOP LOSS HIT per {ticker}: Low {today_low} <= SL {stop_loss}")
+
                 orders.append({
                     "ticker": ticker,
                     "action": "SELL",
-                    "reason": "STOP_LOSS",
+                    "reason": reason,
                     "quantity": qty,
-                    "price": stop_loss  # Nel backtest usiamo il prezzo SL (o slippage)
+                    "price": exit_price 
                 })
-                continue # Se scatta lo stop, non controlliamo il profitto
+                continue # Se scatta lo stop, non controlliamo il target
                 
-            # 2. Controllo TAKE PROFIT
-            # Se il massimo di oggi ha superato il target, abbiamo incassato.
+            # 2. LOGICA TAKE PROFIT
             if take_profit and today_high >= take_profit:
+                # Anche qui ci potrebbe essere un Gap Up, ma per ora usciamo al TP
+                # (conservativo: se apre sopra, prendiamo comunque il TP)
+                exit_price = take_profit
+                if today_open > take_profit:
+                    exit_price = today_open # Bonus: Gap Up a nostro favore!
+                
                 self.logger.info(f"💰 TAKE PROFIT HIT per {ticker}: High {today_high} >= TP {take_profit}")
                 orders.append({
                     "ticker": ticker,
                     "action": "SELL",
                     "reason": "TAKE_PROFIT",
                     "quantity": qty,
-                    "price": take_profit
+                    "price": exit_price
                 })
                 
         return orders

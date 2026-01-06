@@ -55,6 +55,7 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"  # Espone la porta web
+    user: "${UID}:${GID}"
     volumes:
       - .:/app             # Hot-reload del codice
       - ./data:/app/data   # Accesso ai dati (DB e Backtest)

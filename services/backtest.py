@@ -145,7 +145,6 @@ def _execute_single_strategy(strategy_name: str,
         # ---------------------------------------------------------------------
         # Se ci sono ordini nella "busta" (decisi venerdì scorso), li eseguiamo all'OPEN di oggi
         if pending_entry_orders:
-            executed_orders = []
             for order in pending_entry_orders:
                 ticker = order['ticker']
                 
@@ -171,18 +170,30 @@ def _execute_single_strategy(strategy_name: str,
         # FASE B: SORVEGLIANZA GIORNALIERA (Stop Loss & Take Profit)
         # ---------------------------------------------------------------------
         # Controlliamo se i massimi/minimi DI OGGI hanno toccato gli stop delle posizioni aperte.
-        # Questo simula gli ordini GTC sul broker.
         
-        # Estraiamo High e Low per il Risk Manager
-        todays_highs = {t: data['high'] for t, data in todays_prices.items()}
-        todays_lows = {t: data['low'] for t, data in todays_prices.items()}
+        # --- FIX PUNTO 2 e 3: Trasformazione dati per RiskManager & Gap Risk ---
+        # Creiamo un dizionario pulito {ticker: {stop_loss, take_profit, quantity}}
+        positions_for_risk = {}
+        if not pm.df_portfolio.empty:
+            # Creiamo una copia per non modificare l'originale
+            temp_df = pm.df_portfolio.copy()
+            
+            # Rinominiamo colonne per matchare le aspettative del RiskManager
+            # size -> quantity, profit_take -> take_profit
+            temp_df = temp_df.rename(columns={"size": "quantity", "profit_take": "take_profit"})
+            
+            # Assicuriamoci che ticker sia l'indice per creare un dizionario di dizionari
+            if 'ticker' in temp_df.columns:
+                temp_df = temp_df.set_index('ticker')
+            
+            # Esportiamo solo le colonne che servono
+            # orient='index' crea: {'AAPL': {'stop_loss': 100, ...}, 'TSLA': ...}
+            positions_for_risk = temp_df[['stop_loss', 'take_profit', 'quantity']].to_dict(orient='index')
 
-        # Chiediamo al RM di controllare SOLO le posizioni esistenti
-        # (Assicurati che RiskManager abbia il metodo check_intraday_stops)
+        # Passiamo 'todays_prices' COMPLETO (Open, High, Low) per gestire il Gap Risk
         exit_orders = rm.check_intraday_stops(
-            pm.get_positions_snapshot(), # Assumi che ritorni un dict {ticker: position_obj/dict}
-            todays_highs, 
-            todays_lows
+            positions_for_risk, 
+            todays_prices 
         )
         
         for order in exit_orders:
@@ -203,15 +214,24 @@ def _execute_single_strategy(strategy_name: str,
             daily_signals = all_signals[all_signals['date'] == current_date]
             
             if not daily_signals.empty:
-                # Usiamo evaluate per calcolare size e stop, MA NON ESEGUIAMO
-                # Notare: passiamo il cash attuale, ma gli ordini verranno eseguiti lunedì
-                # con il cash che avremo lunedì (potenzialmente diverso se ci sono costi).
-                # Per semplicità, assumiamo che il cash di venerdì sera sia una buona stima.
+                
+                # --- FIX PUNTO 1: Estrazione Conteggi per Evaluate ---
+                # Il RiskManager vuole sapere quante azioni abbiamo per ogni ticker {ticker: size}
+                # Lo estraiamo qui senza sporcare il PortfolioManager
+                current_pos_counts = {}
+                if not pm.df_portfolio.empty:
+                    # Filtriamo solo le posizioni aperte (> 0)
+                    mask = pm.df_portfolio["size"] > 0
+                    active_pos = pm.df_portfolio[mask]
+                    # Creiamo il dizionario
+                    current_pos_counts = dict(zip(active_pos["ticker"], active_pos["size"]))
+
+                # Calcolo size e stop
                 new_orders = rm.evaluate(
                     daily_signals, 
                     pm.get_total_equity(), 
                     float(pm.df_cash.iloc[0]['cash']), 
-                    pm.get_positions_counts()
+                    current_pos_counts # <--- Passiamo il dizionario calcolato
                 )
                 
                 # Mettiamo gli ordini in coda per la prossima apertura (Lunedì)
@@ -241,7 +261,7 @@ def _execute_single_strategy(strategy_name: str,
         "initial_capital": initial_capital,
         "final_equity": final_equity,
         "metrics": {
-            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL']),
+            "total_trades": len(pm.df_trades[pm.df_trades['action']=='SELL']) if not pm.df_trades.empty else 0,
             "total_fees": round(total_fees_paid, 2),
             "max_drawdown_pct": round(max_dd, 2),
             "roi_pct": round(roi, 2)
