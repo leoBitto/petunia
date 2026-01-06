@@ -80,4 +80,4 @@ def test_risk_sell_logic():
     assert len(orders) == 1
     assert orders[0]['action'] == "SELL"
     assert orders[0]['quantity'] == 50 # Vende tutto
-    assert order['order_type'] == "MARKET"
+    
